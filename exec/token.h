@@ -16,29 +16,26 @@ enum TokenType
 
 typedef struct Position
 {
-	struct
-	{
-		int line;
-		int col;
-	} start;
-	struct
-	{
-		int line;
-		int col;
-	} end;
+	int line;
+	int col;
 } Position;
+
+typedef struct Location
+{
+	Position start;
+	Position end;
+} Location;
 
 typedef struct Token
 {
 	enum TokenType type;
 	char *lexeme;
-	Position pos;
+	Location location;
 } Token;
 
 struct Token
-token_create(enum TokenType type, char *lexeme_buffer, Position pos);
-
-struct Token token_create_error(const char *message, Position pos);
+token_create(enum TokenType type, char *lexeme_buffer, Location location);
+struct Token token_create_error(const char *message, Location location);
 void token_cleanup(struct Token *token);
 
 const char *token_type_to_string(enum TokenType type);

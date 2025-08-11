@@ -5,7 +5,7 @@
 
 static void test_alloc(void)
 {
-	Position p = {0, 0, 1, 1};
+	Location p = {0, 0, 1, 1};
 	Token t = token_create(TOKEN_SYMBOL, "aaa", p);
 	g_assert(t.lexeme != NULL);
 	g_assert(strlen(t.lexeme) == 3);
@@ -14,7 +14,7 @@ static void test_alloc(void)
 
 static void test_err(void)
 {
-	Position p = {0, 0, 1, 1};
+	Location p = {0, 0, 1, 1};
 	Token t = token_create_error("whatever", p);
 	g_assert(t.lexeme != NULL);
 	g_assert(strlen(t.lexeme) == 23);

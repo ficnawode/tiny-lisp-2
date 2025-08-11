@@ -5,3 +5,4 @@ TabWidth: 4
 UseTab: Always
 BreakBeforeBraces: Allman
 BinPackParameters: false
+ColumnLimit: 70
