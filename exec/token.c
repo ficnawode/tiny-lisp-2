@@ -6,23 +6,26 @@
 
 #include "token.h"
 
-struct Token
-token_create(enum TokenType type, char *lexeme_buffer, Location location)
+struct Token token_create(enum TokenType type,
+						  char *lexeme_buffer,
+						  Location location)
 {
 	struct Token token;
 	token.type = type;
 	token.lexeme = strdup(lexeme_buffer);
-	assert(token.lexeme && "Lexer Error: Failed to duplicate lexeme string\n");
+	assert(token.lexeme &&
+		   "Lexer Error: Failed to duplicate lexeme string\n");
 	token.location = location;
 	return token;
 }
 
-struct Token token_create_error(const char *message, Location location)
+struct Token token_create_error(const char *message,
+								Location location)
 {
 	struct Token token;
 	token.type = TOKEN_ERROR;
-	asprintf(&token.lexeme, "Error at %d:%d - %s", location.start.line,
-			 location.start.col, message);
+	asprintf(&token.lexeme, "Error at %d:%d - %s",
+			 location.start.line, location.start.col, message);
 	assert(token.lexeme &&
 		   "Lexer Error: Failed to allocate error message string\n");
 	token.location = location;

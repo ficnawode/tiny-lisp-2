@@ -102,13 +102,15 @@ void node_free(Node *node)
 	node = NULL;
 }
 
-static void node_free_v(void *node) { node_free((Node *)node); }
+void node_free_v(void *node) { node_free((Node *)node); }
 
 Env *env_create(Env *parent)
 {
 	Env *e = malloc(sizeof(Env));
-	GHashTable *map = g_hash_table_new_full(g_str_hash, g_str_equal,
-											g_free, node_free_v);
+	e->parent = parent;
+	e->map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+								   node_free_v);
+	return e;
 }
 
 static void
@@ -132,12 +134,14 @@ static GHashTable *hash_table_duplicate(GHashTable *original)
 Env *env_copy(Env *parent)
 {
 	Env *e = malloc(sizeof(Env));
-	GHashTable *map = hash_table_duplicate(parent->map);
+	e->parent = parent;
+	e->map = hash_table_duplicate(parent->map);
+	return e;
 }
 
 void env_emplace(Env *env, char *name, Node *value)
 {
-	g_hash_table_insert(env->map, name, value);
+	g_hash_table_insert(env->map, strdup(name), value);
 }
 
 Node *env_lookup(Env *env, const char *name)

@@ -8,7 +8,8 @@
 
 static char lexer_current_ch(struct LexerContext *ctx)
 {
-	if (ctx->buffer.data == NULL || ctx->buffer.data[ctx->buffer.index] == '\0')
+	if (ctx->buffer.data == NULL ||
+		ctx->buffer.data[ctx->buffer.index] == '\0')
 	{
 		return '\0';
 	}
@@ -17,7 +18,8 @@ static char lexer_current_ch(struct LexerContext *ctx)
 
 static void lexer_advance(struct LexerContext *ctx)
 {
-	if (ctx->buffer.data == NULL || ctx->buffer.data[ctx->buffer.index] == '\0')
+	if (ctx->buffer.data == NULL ||
+		ctx->buffer.data[ctx->buffer.index] == '\0')
 	{
 		return;
 	}
@@ -64,7 +66,8 @@ static Token lexer_handle_whitespace(LexerContext *ctx)
 static Token lexer_handle_comment(LexerContext *ctx)
 {
 	Location location = {ctx->cursor, ctx->cursor};
-	while (lexer_current_ch(ctx) != '\n' && lexer_current_ch(ctx) != '\0')
+	while (lexer_current_ch(ctx) != '\n' &&
+		   lexer_current_ch(ctx) != '\0')
 	{
 		g_string_append_c(ctx->lexeme, lexer_current_ch(ctx));
 		lexer_advance(ctx);
@@ -80,7 +83,8 @@ static Token lexer_handle_str(LexerContext *ctx)
 	g_string_append_c(ctx->lexeme, lexer_current_ch(ctx));
 	location.end = ctx->cursor;
 	lexer_advance(ctx);
-	while (lexer_current_ch(ctx) != '"' && lexer_current_ch(ctx) != '\0')
+	while (lexer_current_ch(ctx) != '"' &&
+		   lexer_current_ch(ctx) != '\0')
 	{
 		g_string_append_c(ctx->lexeme, lexer_current_ch(ctx));
 		location.end = ctx->cursor;
@@ -88,7 +92,8 @@ static Token lexer_handle_str(LexerContext *ctx)
 	}
 	if (lexer_current_ch(ctx) == '\0')
 	{
-		return token_create_error("Unterminated string literal", location);
+		return token_create_error("Unterminated string literal",
+								  location);
 	}
 	g_string_append_c(ctx->lexeme, lexer_current_ch(ctx));
 	location.end = ctx->cursor;
@@ -105,7 +110,8 @@ static Token lexer_handle_symbol(LexerContext *ctx)
 {
 	Location location = {ctx->cursor, ctx->cursor};
 
-	while (lexer_current_ch(ctx) != '\0' && !isspace(lexer_current_ch(ctx)) &&
+	while (lexer_current_ch(ctx) != '\0' &&
+		   !isspace(lexer_current_ch(ctx)) &&
 		   !strchr("()';\"", lexer_current_ch(ctx)))
 	{
 		char current = lexer_current_ch(ctx);
@@ -137,7 +143,8 @@ static Token lexer_handle_symbol(LexerContext *ctx)
 
 		if (contains_digit)
 		{
-			return token_create(TOKEN_NUMBER, ctx->lexeme->str, location);
+			return token_create(TOKEN_NUMBER, ctx->lexeme->str,
+								location);
 		}
 	}
 

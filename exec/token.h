@@ -33,9 +33,11 @@ typedef struct Token
 	Location location;
 } Token;
 
-struct Token
-token_create(enum TokenType type, char *lexeme_buffer, Location location);
-struct Token token_create_error(const char *message, Location location);
+struct Token token_create(enum TokenType type,
+						  char *lexeme_buffer,
+						  Location location);
+struct Token token_create_error(const char *message,
+								Location location);
 void token_cleanup(struct Token *token);
 
 const char *token_type_to_string(enum TokenType type);

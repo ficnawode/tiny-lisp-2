@@ -6,3 +6,4 @@ UseTab: Always
 BreakBeforeBraces: Allman
 BinPackParameters: false
 ColumnLimit: 70
+PointerAlignment: Right
