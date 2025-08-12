@@ -99,6 +99,7 @@ void node_free(Node *node)
 		break;
 	default:
 	}
+	free(node);
 	node = NULL;
 }
 
@@ -149,4 +150,12 @@ Node *env_lookup(Env *env, const char *name)
 	return (Node *)g_hash_table_lookup(env->map, name);
 }
 
-void env_cleanup(Env *env) { g_hash_table_destroy(env->map); }
+void env_cleanup(Env *env)
+{
+	if (!env)
+	{
+		return;
+	}
+	g_hash_table_destroy(env->map);
+	free(env);
+}

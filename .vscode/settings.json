@@ -4,6 +4,7 @@
         "token.h": "c",
         "glib.h": "c",
         "stdio.h": "c",
-        "array": "c"
+        "array": "c",
+        "numbers": "c"
     }
 }
