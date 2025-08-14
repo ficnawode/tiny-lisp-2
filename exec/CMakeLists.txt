@@ -1,6 +1,6 @@
 set(NAME exec)
 
-file(GLOB_RECURSE SOURCES *.c)
+file(GLOB_RECURSE SOURCES *.c *.h)
 list(FILTER SOURCES EXCLUDE REGEX "main.c")
 
 

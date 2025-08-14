@@ -8,7 +8,7 @@ typedef struct LexerContext
 {
 	struct
 	{
-		const char *data;
+		char *data;
 		int index;
 	} buffer;
 
@@ -16,7 +16,7 @@ typedef struct LexerContext
 	GString *lexeme;
 } LexerContext;
 
-LexerContext lexer_create(const char *source_code);
+LexerContext *lexer_create(const char *source_code);
 
 // Parser will have to free token lexeme!
 Token lexer_next(LexerContext *ctx);

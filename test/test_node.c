@@ -59,7 +59,9 @@ static void test_func(void)
 	g_ptr_array_add(params, p2);
 	g_ptr_array_add(params, p3);
 
-	Node *body = make_literal_float(3.14159);
+	Node *body_element = make_literal_float(3.14159);
+	GPtrArray *body = g_ptr_array_new_with_free_func(node_free_v);
+	g_ptr_array_add(body, body_element);
 	Env *env = env_create(NULL);
 	Node *node = make_function(params, body, env);
 	g_assert_cmpstr(p1, ==,
@@ -98,6 +100,11 @@ static void test_env(void)
 	env_emplace(env, "p1", p1);
 	env_emplace(env, "p2", p2);
 	env_emplace(env, "p3", p3);
+
+	// env emplace is a deep copy of both string and node
+	node_free(p1);
+	node_free(p2);
+	node_free(p3);
 
 	Node *p1_lookup = env_lookup(env, "p1");
 	Node *p2_lookup = env_lookup(env, "p2");

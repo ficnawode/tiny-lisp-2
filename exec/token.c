@@ -10,7 +10,7 @@ struct Token token_create(enum TokenType type,
 						  char *lexeme_buffer,
 						  Location location)
 {
-	struct Token token;
+	Token token;
 	token.type = type;
 	token.lexeme = strdup(lexeme_buffer);
 	assert(token.lexeme &&
@@ -19,10 +19,14 @@ struct Token token_create(enum TokenType type,
 	return token;
 }
 
-struct Token token_create_error(const char *message,
-								Location location)
+Token token_copy(Token *token)
 {
-	struct Token token;
+	return token_create(token->type, token->lexeme, token->location);
+}
+
+Token token_create_error(const char *message, Location location)
+{
+	Token token;
 	token.type = TOKEN_ERROR;
 	asprintf(&token.lexeme, "Error at %d:%d - %s",
 			 location.start.line, location.start.col, message);
@@ -35,7 +39,9 @@ struct Token token_create_error(const char *message,
 void token_cleanup(struct Token *token)
 {
 	if (token->lexeme != NULL)
+	{
 		free(token->lexeme);
+	}
 }
 
 const char *token_type_to_string(enum TokenType type)
@@ -67,7 +73,7 @@ const char *token_type_to_string(enum TokenType type)
 	}
 }
 
-void print_token(struct Token *token)
+void print_token(Token *token)
 {
 	if (token->type == TOKEN_WHITESPACE)
 		return;

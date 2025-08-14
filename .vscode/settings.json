@@ -5,6 +5,12 @@
         "glib.h": "c",
         "stdio.h": "c",
         "array": "c",
-        "numbers": "c"
+        "numbers": "c",
+        "stdbool.h": "c",
+        "node.h": "c",
+        "parser.h": "c",
+        "string.h": "c",
+        "bitset": "c",
+        "string_view": "c"
     }
 }

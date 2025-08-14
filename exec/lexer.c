@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -121,8 +122,8 @@ static Token lexer_handle_symbol(LexerContext *ctx)
 			break;
 		}
 		g_string_append_c(ctx->lexeme, lexer_current_ch(ctx));
-		location.end = ctx->cursor;
 		lexer_advance(ctx);
+		location.end = ctx->cursor;
 	}
 
 	char *endptr;
@@ -164,24 +165,33 @@ static Token lexer_handle_error(LexerContext *ctx)
 	return token_create_error(error_msg, location);
 }
 
-LexerContext lexer_create(const char *source_code)
+LexerContext *lexer_create(const char *source_code)
 {
 
-	LexerContext ctx;
+	LexerContext *ctx = malloc(sizeof(LexerContext));
+	assert(ctx && "Out of memory");
 
-	ctx.buffer.data = source_code;
-	ctx.buffer.index = 0;
-	ctx.cursor.line = 1;
-	ctx.cursor.col = 1;
+	ctx->buffer.data = strdup(source_code);
+	assert(ctx->buffer.data && "Out of memory");
+	ctx->buffer.index = 0;
+	ctx->cursor.line = 1;
+	ctx->cursor.col = 1;
 
-	ctx.lexeme = g_string_new(NULL);
+	ctx->lexeme = g_string_new(NULL);
 	return ctx;
 }
 
 void lexer_cleanup(LexerContext *ctx)
 {
+	if (!ctx)
+	{
+		return;
+	}
 	g_string_free(ctx->lexeme, TRUE);
+	free(ctx->buffer.data);
 	ctx->buffer.data = NULL;
+	free(ctx);
+	ctx = NULL;
 }
 
 Token lexer_next(LexerContext *ctx)

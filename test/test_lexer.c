@@ -11,17 +11,17 @@ typedef struct TokenSequence
 
 static void expect_token_sequence(char *code, TokenSequence seq)
 {
-	LexerContext lexer = lexer_create(code);
+	LexerContext *lexer = lexer_create(code);
 	for (int i = 0; i < seq.len; i++)
 	{
-		Token token = lexer_next(&lexer);
+		Token token = lexer_next(lexer);
 		print_token(&token);
 		enum TokenType expected_type = seq.tts[i];
 		printf("\nExpected token: %s",
 			   token_type_to_string(expected_type));
 		g_assert(token.type == expected_type);
 	}
-	Token token = lexer_next(&lexer);
+	Token token = lexer_next(lexer);
 	g_assert(token.type == TOKEN_EOF);
 }
 
