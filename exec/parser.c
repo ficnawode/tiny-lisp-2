@@ -132,6 +132,7 @@ static Node *parse_ifexpr(ParserContext *ctx, Env *env)
 	Node *condition = parse_expression(ctx, env);
 	if (condition == NULL)
 		return NULL;
+	skip_whitespace_and_comments(ctx);
 
 	Node *then_branch = parse_expression(ctx, env);
 	if (then_branch == NULL)
@@ -177,7 +178,7 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 	}
 
 	Env *body_env = env_copy(env);
-	GPtrArray *params = g_ptr_array_new_with_free_func(free);
+	StringList *params = string_list_create();
 
 	skip_whitespace_and_comments(ctx);
 	while (ctx->current_token.type == TOKEN_SYMBOL)
@@ -185,11 +186,11 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 		char *param_name = parse_undefined_symbol(ctx);
 		if (param_name == NULL)
 		{
-			g_ptr_array_free(params, TRUE);
+			string_list_cleanup(params);
 			env_cleanup(body_env);
 			return NULL;
 		}
-		g_ptr_array_add(params, param_name);
+		string_list_emplace(params, param_name);
 		env_emplace(body_env, param_name, get_placeholder());
 		free(param_name);
 		skip_whitespace_and_comments(ctx);
@@ -198,19 +199,18 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 	if (!consume(ctx, TOKEN_RPAREN,
 				 "Expected ')' to close parameter list."))
 	{
-		g_ptr_array_free(params, TRUE);
+		string_list_cleanup(params);
 		env_cleanup(body_env);
 		return NULL;
 	}
 
-	for (guint i = 0; i < params->len; i++)
+	for (guint i = 0; i < params->_array->len; i++)
 	{
-		char *param_name = g_ptr_array_index(params, i);
+		char *param_name = string_list_index(params, i);
 		env_emplace(body_env, param_name, get_placeholder());
 	}
 
-	GPtrArray *body_expressions =
-		g_ptr_array_new_with_free_func(node_free_v);
+	NodeList *body_expressions = node_list_create();
 
 	skip_whitespace_and_comments(ctx);
 	while (ctx->current_token.type != TOKEN_RPAREN)
@@ -218,25 +218,25 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 		Node *expr = parse_expression(ctx, body_env);
 		if (expr)
 		{
-			g_ptr_array_add(body_expressions, expr);
+			node_list_emplace(body_expressions, expr);
 		}
 		else
 		{
 			error_at_current_token(
 				ctx, "Failed to parse expression in function body.");
-			g_ptr_array_free(params, TRUE);
-			g_ptr_array_free(body_expressions, TRUE);
+			string_list_cleanup(params);
+			node_list_cleanup(body_expressions);
 			env_cleanup(body_env);
 			return NULL;
 		}
 		skip_whitespace_and_comments(ctx);
 	}
 
-	if (body_expressions->len == 0)
+	if (body_expressions->_array->len == 0)
 	{
 		error_at_current_token(ctx, "Function body cannot be empty.");
-		g_ptr_array_free(params, TRUE);
-		g_ptr_array_free(body_expressions, TRUE);
+		string_list_cleanup(params);
+		node_list_copy(body_expressions);
 		env_cleanup(body_env);
 		return NULL;
 	}
@@ -272,9 +272,10 @@ static Node *parse_def_variable(ParserContext *ctx, Env *env)
 		warning_at_current_token(ctx, warning_msg);
 		free(warning_msg);
 	}
-	env_emplace(env, name, value);
 
-	Node *def_node = make_def(name, value);
+	env_emplace(env, name, value);
+	VarPair *binding = var_pair_create(name, value);
+	Node *def_node = make_def(binding);
 	free(name);
 	return def_node;
 }
@@ -288,51 +289,51 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 	if (name == NULL)
 		return NULL;
 
-	GPtrArray *params = g_ptr_array_new_with_free_func(free);
+	StringList *params = string_list_create();
 	skip_whitespace_and_comments(ctx);
 	while (ctx->current_token.type == TOKEN_SYMBOL)
 	{
 		char *param_name = parse_undefined_symbol(ctx);
 		if (param_name == NULL)
 		{
-			g_ptr_array_free(params, TRUE);
+			string_list_cleanup(params);
 			free(name);
 			return NULL;
 		}
-		g_ptr_array_add(params, param_name);
+		string_list_emplace(params, param_name);
 		skip_whitespace_and_comments(ctx);
 	}
 
 	if (!consume(ctx, TOKEN_RPAREN,
 				 "Expected ')' to close parameter list."))
 	{
-		g_ptr_array_free(params, TRUE);
+		string_list_cleanup(params);
 		free(name);
 		return NULL;
 	}
 
 	env_emplace(env, name, get_placeholder());
 	Env *body_env = env_copy(env);
-	for (guint i = 0; i < params->len; i++)
+	for (guint i = 0; i < params->_array->len; i++)
 	{
-		env_emplace(body_env, (char *)g_ptr_array_index(params, i),
+		env_emplace(body_env, string_list_index(params, i),
 					get_placeholder());
 	}
 
-	GPtrArray *body_expressions =
-		g_ptr_array_new_with_free_func(node_free_v);
+	NodeList *body_expressions = node_list_create();
+
 	skip_whitespace_and_comments(ctx);
 	while (ctx->current_token.type != TOKEN_RPAREN)
 	{
 		Node *expr = parse_expression(ctx, body_env);
 		if (expr)
 		{
-			g_ptr_array_add(body_expressions, expr);
+			node_list_emplace(body_expressions, expr);
 		}
 		else
 		{
-			g_ptr_array_free(params, TRUE);
-			g_ptr_array_free(body_expressions, TRUE);
+			string_list_cleanup(params);
+			node_list_cleanup(body_expressions);
 			env_cleanup(body_env);
 			free(name);
 			return NULL;
@@ -346,7 +347,8 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 	// env_emplace(body_env, name, function_node);
 	// env_emplace(env, name, function_node);
 
-	Node *def_node = make_def(name, function_node);
+	VarPair *binding = var_pair_create(name, function_node);
+	Node *def_node = make_def(binding);
 	free(name);
 	return def_node;
 }
@@ -392,8 +394,7 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 	}
 
 	Env *let_env = env_copy(env);
-	GPtrArray *bindings =
-		g_ptr_array_new_with_free_func(let_binding_free_v);
+	VarPairList *bindings = var_pair_list_create();
 
 	skip_whitespace_and_comments(ctx);
 	while (ctx->current_token.type != TOKEN_RPAREN)
@@ -401,7 +402,7 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 		if (!consume(ctx, TOKEN_LPAREN,
 					 "Expected '(' for a binding pair."))
 		{
-			g_ptr_array_free(bindings, TRUE);
+			var_pair_list_cleanup(bindings);
 			env_cleanup(let_env);
 			return NULL;
 		}
@@ -411,7 +412,7 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 		{
 			error_at_current_token(
 				ctx, "Expected a symbol for binding name.");
-			g_ptr_array_free(bindings, TRUE);
+			var_pair_list_cleanup(bindings);
 			env_cleanup(let_env);
 			return NULL;
 		}
@@ -422,34 +423,32 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 		if (value == NULL)
 		{
 			free(name);
-			g_ptr_array_free(bindings, TRUE);
+			var_pair_list_cleanup(bindings);
 			env_cleanup(let_env);
 			return NULL;
 		}
 
 		env_emplace(let_env, name, value);
-		free(name);
 
 		if (!consume(ctx, TOKEN_RPAREN,
 					 "Expected ')' to close binding pair."))
 		{
 			free(name);
 			node_free(value);
-			g_ptr_array_free(bindings, TRUE);
+			var_pair_list_cleanup(bindings);
 			env_cleanup(let_env);
 			return NULL;
 		}
 
-		LetBinding *binding_node = let_binding_create(name, value);
-		g_ptr_array_add(bindings, binding_node);
+		VarPair *binding = var_pair_create(name, value);
+		var_pair_list_emplace(bindings, binding);
 		env_emplace(let_env, name, value);
-
+		free(name);
 		skip_whitespace_and_comments(ctx);
 	}
 	advance(ctx);
 
-	GPtrArray *body_expressions =
-		g_ptr_array_new_with_free_func(node_free_v);
+	NodeList *body_expressions = node_list_create();
 
 	skip_whitespace_and_comments(ctx);
 	while (ctx->current_token.type != TOKEN_RPAREN)
@@ -457,25 +456,25 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 		Node *expr = parse_expression(ctx, let_env);
 		if (expr)
 		{
-			g_ptr_array_add(body_expressions, expr);
+			node_list_emplace(body_expressions, expr);
 		}
 		else
 		{
 			error_at_current_token(
 				ctx, "Failed to parse expression in let body.");
-			g_ptr_array_free(bindings, TRUE);
-			g_ptr_array_free(body_expressions, TRUE);
+			var_pair_list_cleanup(bindings);
+			node_list_cleanup(body_expressions);
 			env_cleanup(let_env);
 			return NULL;
 		}
 		skip_whitespace_and_comments(ctx);
 	}
 
-	if (body_expressions->len == 0)
+	if (body_expressions->_array->len == 0)
 	{
 		error_at_current_token(ctx, "Let body cannot be empty.");
-		g_ptr_array_free(bindings, TRUE);
-		g_ptr_array_free(body_expressions, TRUE);
+		var_pair_list_cleanup(bindings);
+		node_list_cleanup(body_expressions);
 		env_cleanup(let_env);
 		return NULL;
 	}
@@ -493,7 +492,7 @@ static Node *parse_quote(ParserContext *ctx, Env *env)
 
 static Node *parse_call(ParserContext *ctx, Node *callable, Env *env)
 {
-	GPtrArray *args = g_ptr_array_new_with_free_func(node_free_v);
+	NodeList *args = node_list_create();
 
 	skip_whitespace_and_comments(ctx);
 	while (ctx->current_token.type != TOKEN_RPAREN &&
@@ -502,11 +501,11 @@ static Node *parse_call(ParserContext *ctx, Node *callable, Env *env)
 		Node *arg = parse_expression(ctx, env);
 		if (arg == NULL)
 		{
-			g_ptr_array_free(args, TRUE);
+			node_list_cleanup(args);
 			node_free(callable);
 			return NULL;
 		}
-		g_ptr_array_add(args, arg);
+		node_list_emplace(args, arg);
 		skip_whitespace_and_comments(ctx);
 	}
 	return make_function_call(callable, args);
@@ -715,16 +714,15 @@ void parser_cleanup(ParserContext *ctx)
 	free(ctx);
 }
 
-GPtrArray *parser_parse(ParserContext *ctx)
+NodeList *parser_parse(ParserContext *ctx)
 {
-	GPtrArray *node_array =
-		g_ptr_array_new_with_free_func(node_free_v);
+	NodeList *node_array = node_list_create();
 	while (ctx->current_token.type != TOKEN_EOF)
 	{
 		Node *n = parse_expression(ctx, ctx->global_env);
 		if (n)
 		{
-			g_ptr_array_add(node_array, n);
+			node_list_emplace(node_array, n);
 		}
 		else if (ctx->current_token.type == TOKEN_EOF)
 		{

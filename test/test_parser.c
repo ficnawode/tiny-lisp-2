@@ -8,26 +8,26 @@
 	parser_print_errors(p_ctx)
 
 #define CLEANUP_TEST(p_ctx, p_nodes)                                 \
-	g_ptr_array_free(p_nodes, TRUE);                                 \
+	node_list_cleanup(p_nodes);                                      \
 	parser_cleanup(p_ctx)
 
 static void test_literal_bool(void)
 {
 	char *source_code = "#t #f";
 	ParserContext *parser;
-	GPtrArray *node_array;
+	NodeList *node_array;
 
 	SETUP_TEST(source_code, parser, node_array);
 
-	g_assert_cmpint(node_array->len, ==, 2);
+	g_assert_cmpint(node_array->_array->len, ==, 2);
 
-	Node *n1 = g_ptr_array_index(node_array, 0);
+	Node *n1 = g_ptr_array_index(node_array->_array, 0);
 	g_assert_nonnull(n1);
 	g_assert_cmpint(n1->type, ==, NODE_LITERAL);
 	g_assert_cmpint(n1->literal.lit_type, ==, LIT_BOOL);
 	g_assert_true(n1->literal.b_val);
 
-	Node *n2 = g_ptr_array_index(node_array, 1);
+	Node *n2 = g_ptr_array_index(node_array->_array, 1);
 	g_assert_nonnull(n2);
 	g_assert_cmpint(n2->type, ==, NODE_LITERAL);
 	g_assert_cmpint(n2->literal.lit_type, ==, LIT_BOOL);
@@ -40,19 +40,19 @@ static void test_literal_number(void)
 {
 	char *source_code = "1 3.1415";
 	ParserContext *parser;
-	GPtrArray *node_array;
+	NodeList *node_array;
 
 	SETUP_TEST(source_code, parser, node_array);
 
-	g_assert_cmpint(node_array->len, ==, 2);
+	g_assert_cmpint(node_array->_array->len, ==, 2);
 
-	Node *n1 = g_ptr_array_index(node_array, 0);
+	Node *n1 = node_list_index(node_array, 0);
 	g_assert_nonnull(n1);
 	g_assert_cmpint(n1->type, ==, NODE_LITERAL);
 	g_assert_cmpint(n1->literal.lit_type, ==, LIT_INT);
 	g_assert_cmpint(n1->literal.i_val, ==, 1);
 
-	Node *n2 = g_ptr_array_index(node_array, 1);
+	Node *n2 = node_list_index(node_array, 1);
 	g_assert_nonnull(n2);
 	g_assert_cmpint(n2->type, ==, NODE_LITERAL);
 	g_assert_cmpint(n2->literal.lit_type, ==, LIT_FLOAT);
@@ -65,22 +65,23 @@ static void test_funcdef_no_params(void)
 {
 	char *source_code = "(lambda () 42)";
 	ParserContext *parser;
-	GPtrArray *node_array;
+	NodeList *node_array;
 
 	SETUP_TEST(source_code, parser, node_array);
 
-	g_assert_cmpint(node_array->len, ==, 1);
+	g_assert_cmpint(node_array->_array->len, ==, 1);
 
-	Node *func_node = g_ptr_array_index(node_array, 0);
+	Node *func_node = node_list_index(node_array, 0);
 	g_assert_nonnull(func_node);
 	g_assert_cmpint(func_node->type, ==, NODE_FUNCTION);
 
 	g_assert_nonnull(func_node->function.param_names);
-	g_assert_cmpint(func_node->function.param_names->len, ==, 0);
+	g_assert_cmpint(func_node->function.param_names->_array->len, ==,
+					0);
 
-	GPtrArray *body = func_node->function.body;
-	g_assert_cmpint(body->len, ==, 1);
-	Node *body_node = g_ptr_array_index(body, 0);
+	NodeList *body = func_node->function.body;
+	g_assert_cmpint(body->_array->len, ==, 1);
+	Node *body_node = node_list_index(body, 0);
 	g_assert_nonnull(body_node);
 	g_assert_cmpint(body_node->type, ==, NODE_LITERAL);
 	g_assert_cmpint(body_node->literal.lit_type, ==, LIT_INT);
@@ -94,7 +95,7 @@ static void test_funcdef_with_params(void)
 {
 	char *source_code = "(lambda (x y) (+ x y))";
 	ParserContext *parser;
-	GPtrArray *node_array;
+	NodeList *node_array;
 
 	SETUP_TEST(source_code, parser, node_array);
 
@@ -104,23 +105,23 @@ static void test_funcdef_with_params(void)
 	}
 	g_assert_cmpint(parser->errors->len, ==, 0);
 
-	g_assert_cmpint(node_array->len, ==, 1);
+	g_assert_cmpint(node_array->_array->len, ==, 1);
 
-	Node *func_node = g_ptr_array_index(node_array, 0);
+	Node *func_node = node_list_index(node_array, 0);
 	g_assert_nonnull(func_node);
 	g_assert_cmpint(func_node->type, ==, NODE_FUNCTION);
 
-	GPtrArray *params = func_node->function.param_names;
+	StringList *params = func_node->function.param_names;
 	g_assert_nonnull(params);
-	g_assert_cmpint(params->len, ==, 2);
-	g_assert_cmpstr(g_ptr_array_index(params, 0), ==, "x");
-	g_assert_cmpstr(g_ptr_array_index(params, 1), ==, "y");
+	g_assert_cmpint(params->_array->len, ==, 2);
+	g_assert_cmpstr(string_list_index(params, 0), ==, "x");
+	g_assert_cmpstr(string_list_index(params, 1), ==, "y");
 
-	GPtrArray *body_list = func_node->function.body;
+	NodeList *body_list = func_node->function.body;
 	g_assert_nonnull(body_list);
-	g_assert_cmpint(body_list->len, ==, 1);
+	g_assert_cmpint(body_list->_array->len, ==, 1);
 
-	Node *body_expr_node = g_ptr_array_index(body_list, 0);
+	Node *body_expr_node = node_list_index(body_list, 0);
 	g_assert_nonnull(body_expr_node);
 	g_assert_cmpint(body_expr_node->type, ==, NODE_CALL);
 
@@ -129,16 +130,16 @@ static void test_funcdef_with_params(void)
 	g_assert_cmpint(callable->type, ==, NODE_VARIABLE);
 	g_assert_cmpstr(callable->variable.name, ==, "+");
 
-	GPtrArray *args = body_expr_node->call.args;
+	NodeList *args = body_expr_node->call.args;
 	g_assert_nonnull(args);
-	g_assert_cmpint(args->len, ==, 2);
+	g_assert_cmpint(args->_array->len, ==, 2);
 
-	Node *arg1 = g_ptr_array_index(args, 0);
+	Node *arg1 = node_list_index(args, 0);
 	g_assert_nonnull(arg1);
 	g_assert_cmpint(arg1->type, ==, NODE_VARIABLE);
 	g_assert_cmpstr(arg1->variable.name, ==, "x");
 
-	Node *arg2 = g_ptr_array_index(args, 1);
+	Node *arg2 = node_list_index(args, 1);
 	g_assert_nonnull(arg2);
 	g_assert_cmpint(arg2->type, ==, NODE_VARIABLE);
 	g_assert_cmpstr(arg2->variable.name, ==, "y");
@@ -150,31 +151,31 @@ static void test_let_multiple_body_exprs(void)
 {
 	char *source_code = "(let ((x 10)) (def y 20) (+ x y))";
 	ParserContext *parser;
-	GPtrArray *node_array;
+	NodeList *node_array;
 
 	SETUP_TEST(source_code, parser, node_array);
 
 	if (parser->errors->len > 0)
 		parser_print_errors(parser);
 	g_assert_cmpint(parser->errors->len, ==, 0);
-	g_assert_cmpint(node_array->len, ==, 1);
+	g_assert_cmpint(node_array->_array->len, ==, 1);
 
-	Node *let_node = g_ptr_array_index(node_array, 0);
+	Node *let_node = node_list_index(node_array, 0);
 	g_assert_nonnull(let_node);
 	g_assert_cmpint(let_node->type, ==, NODE_LET);
 
-	g_assert_cmpint(let_node->let.bindings->len, ==, 1);
+	g_assert_cmpint(let_node->let.bindings->_array->len, ==, 1);
 
-	GPtrArray *body = let_node->let.body;
+	NodeList *body = let_node->let.body;
 	g_assert_nonnull(body);
-	g_assert_cmpint(body->len, ==, 2);
+	g_assert_cmpint(body->_array->len, ==, 2);
 
-	Node *def_expr = g_ptr_array_index(body, 0);
+	Node *def_expr = node_list_index(body, 0);
 	g_assert_nonnull(def_expr);
 	g_assert_cmpint(def_expr->type, ==, NODE_DEF);
-	g_assert_cmpstr(def_expr->def.name, ==, "y");
+	g_assert_cmpstr(def_expr->def.binding->name, ==, "y");
 
-	Node *call_expr = g_ptr_array_index(body, 1);
+	Node *call_expr = node_list_index(body, 1);
 	g_assert_nonnull(call_expr);
 	g_assert_cmpint(call_expr->type, ==, NODE_CALL);
 
@@ -185,7 +186,7 @@ static void test_def(void)
 {
 	char *source_code = "(def my-var 123) my-var";
 	ParserContext *parser;
-	GPtrArray *node_array;
+	NodeList *node_array;
 
 	SETUP_TEST(source_code, parser, node_array);
 
@@ -193,21 +194,21 @@ static void test_def(void)
 		parser_print_errors(parser);
 	g_assert_cmpint(parser->errors->len, ==, 0);
 
-	g_assert_cmpint(node_array->len, ==, 2);
+	g_assert_cmpint(node_array->_array->len, ==, 2);
 
-	Node *def_node = g_ptr_array_index(node_array, 0);
+	Node *def_node = node_list_index(node_array, 0);
 	g_assert_nonnull(def_node);
 	g_assert_cmpint(def_node->type, ==, NODE_DEF);
 
-	g_assert_cmpstr(def_node->def.name, ==, "my-var");
+	g_assert_cmpstr(def_node->def.binding->name, ==, "my-var");
 
-	Node *value_node = def_node->def.value;
+	Node *value_node = def_node->def.binding->value_expr;
 	g_assert_nonnull(value_node);
 	g_assert_cmpint(value_node->type, ==, NODE_LITERAL);
 	g_assert_cmpint(value_node->literal.lit_type, ==, LIT_INT);
 	g_assert_cmpint(value_node->literal.i_val, ==, 123);
 
-	Node *var_node = g_ptr_array_index(node_array, 1);
+	Node *var_node = node_list_index(node_array, 1);
 	g_assert_nonnull(var_node);
 	g_assert_cmpint(var_node->type, ==, NODE_VARIABLE);
 	g_assert_cmpstr(var_node->variable.name, ==, "my-var");
@@ -219,7 +220,7 @@ static void test_ifexpr(void)
 {
 	char *source_code = "(if #t 10 20)";
 	ParserContext *parser;
-	GPtrArray *node_array;
+	NodeList *node_array;
 
 	SETUP_TEST(source_code, parser, node_array);
 
@@ -228,9 +229,9 @@ static void test_ifexpr(void)
 		parser_print_errors(parser);
 	}
 	g_assert_cmpint(parser->errors->len, ==, 0);
-	g_assert_cmpint(node_array->len, ==, 1);
+	g_assert_cmpint(node_array->_array->len, ==, 1);
 
-	Node *if_node = g_ptr_array_index(node_array, 0);
+	Node *if_node = node_list_index(node_array, 0);
 	g_assert_nonnull(if_node);
 	g_assert_cmpint(if_node->type, ==, NODE_IF);
 
@@ -257,7 +258,7 @@ static void test_def_named_function_recursive(void)
 	char *source_code = "(def (factorial n) (if (= n 0) 1 (* n "
 						"(factorial (- n 1)))))";
 	ParserContext *parser;
-	GPtrArray *node_array;
+	NodeList *node_array;
 
 	SETUP_TEST(source_code, parser, node_array);
 
@@ -266,26 +267,26 @@ static void test_def_named_function_recursive(void)
 		parser_print_errors(parser);
 	}
 	g_assert_cmpint(parser->errors->len, ==, 0);
-	g_assert_cmpint(node_array->len, ==, 1);
+	g_assert_cmpint(node_array->_array->len, ==, 1);
 
-	Node *def_node = g_ptr_array_index(node_array, 0);
+	Node *def_node = node_list_index(node_array, 0);
 	g_assert_nonnull(def_node);
 	g_assert_cmpint(def_node->type, ==, NODE_DEF);
-	g_assert_cmpstr(def_node->def.name, ==, "factorial");
+	g_assert_cmpstr(def_node->def.binding->name, ==, "factorial");
 
-	Node *func_node = def_node->def.value;
+	Node *func_node = def_node->def.binding->value_expr;
 	g_assert_nonnull(func_node);
 	g_assert_cmpint(func_node->type, ==, NODE_FUNCTION);
 
-	GPtrArray *params = func_node->function.param_names;
+	StringList *params = func_node->function.param_names;
 	g_assert_nonnull(params);
-	g_assert_cmpint(params->len, ==, 1);
-	g_assert_cmpstr(g_ptr_array_index(params, 0), ==, "n");
+	g_assert_cmpint(params->_array->len, ==, 1);
+	g_assert_cmpstr(string_list_index(params, 0), ==, "n");
 
-	GPtrArray *body_list = func_node->function.body;
+	NodeList *body_list = func_node->function.body;
 	g_assert_nonnull(body_list);
-	g_assert_cmpint(body_list->len, ==, 1);
-	Node *if_node = g_ptr_array_index(body_list, 0);
+	g_assert_cmpint(body_list->_array->len, ==, 1);
+	Node *if_node = node_list_index(body_list, 0);
 	g_assert_nonnull(if_node);
 	g_assert_cmpint(if_node->type, ==, NODE_IF);
 
@@ -294,8 +295,7 @@ static void test_def_named_function_recursive(void)
 	g_assert_cmpint(else_branch->type, ==, NODE_CALL);
 	g_assert_cmpstr(else_branch->call.fn->variable.name, ==, "*");
 
-	Node *recursive_call =
-		g_ptr_array_index(else_branch->call.args, 1);
+	Node *recursive_call = node_list_index(else_branch->call.args, 1);
 	g_assert_nonnull(recursive_call);
 	g_assert_cmpint(recursive_call->type, ==, NODE_CALL);
 

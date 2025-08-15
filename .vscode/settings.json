@@ -11,6 +11,20 @@
         "parser.h": "c",
         "string.h": "c",
         "bitset": "c",
-        "string_view": "c"
+        "string_view": "c",
+        "containers.h": "c",
+        "tuple": "c",
+        "chrono": "c",
+        "text_encoding": "c",
+        "typeindex": "c",
+        "typeinfo": "c",
+        "charconv": "c",
+        "optional": "c",
+        "format": "c",
+        "ratio": "c",
+        "system_error": "c",
+        "functional": "c",
+        "type_traits": "c",
+        "utility": "c"
     }
 }

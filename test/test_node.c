@@ -49,27 +49,26 @@ static void test_literals(void)
 
 static void test_func(void)
 {
-	GPtrArray *params = g_ptr_array_new_with_free_func(g_free);
+	StringList *params = string_list_create();
 
-	char *p1 = strdup("foo");
-	char *p2 = strdup("bar");
-	char *p3 = strdup("baz");
-
-	g_ptr_array_add(params, p1);
-	g_ptr_array_add(params, p2);
-	g_ptr_array_add(params, p3);
+	char *p1 = "foo";
+	char *p2 = "bar";
+	char *p3 = "baz";
+	string_list_emplace(params, p1);
+	string_list_emplace(params, p2);
+	string_list_emplace(params, p3);
 
 	Node *body_element = make_literal_float(3.14159);
-	GPtrArray *body = g_ptr_array_new_with_free_func(node_free_v);
-	g_ptr_array_add(body, body_element);
+	NodeList *body = node_list_create();
+	node_list_emplace(body, body_element);
 	Env *env = env_create(NULL);
 	Node *node = make_function(params, body, env);
 	g_assert_cmpstr(p1, ==,
-					g_ptr_array_index(node->function.param_names, 0));
+					string_list_index(node->function.param_names, 0));
 	g_assert_cmpstr(p2, ==,
-					g_ptr_array_index(node->function.param_names, 1));
+					string_list_index(node->function.param_names, 1));
 	g_assert_cmpstr(p3, ==,
-					g_ptr_array_index(node->function.param_names, 2));
+					string_list_index(node->function.param_names, 2));
 
 	node_free(node);
 	env_cleanup(env);

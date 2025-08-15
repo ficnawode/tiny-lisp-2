@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "util/containers.h"
+
 typedef enum NodeType
 {
 	NODE_LITERAL,
@@ -26,13 +28,12 @@ typedef enum LiteralType
 } LiteralType;
 
 typedef struct Node Node;
-typedef struct Env Env;
+typedef struct VarPair VarPair;
+typedef struct VarPairList VarPairList;
+typedef struct NodeList NodeList;
+typedef struct StringList StringList;
 
-typedef struct LetBinding
-{
-	char *name;
-	Node *value_expr;
-} LetBinding;
+typedef struct Env Env;
 
 typedef struct Node
 {
@@ -59,15 +60,15 @@ typedef struct Node
 
 		struct
 		{
-			GPtrArray *param_names; // list of char*
-			GPtrArray *body;		// list of Node*
+			StringList *param_names;
+			NodeList *body;
 			Env *closure_env;
 		} function;
 
 		struct
 		{
 			Node *fn;
-			GPtrArray *args; // Node*
+			NodeList *args;
 		} call;
 
 		struct
@@ -79,14 +80,13 @@ typedef struct Node
 
 		struct
 		{
-			char *name;
-			Node *value;
+			VarPair *binding;
 		} def;
 
 		struct
 		{
-			GPtrArray *bindings; // array of LetBinding*
-			GPtrArray *body;	 // array of Node*
+			VarPairList *bindings;
+			NodeList *body;
 			Env *env;
 		} let;
 
@@ -99,11 +99,11 @@ typedef struct Node
 
 typedef struct Env
 {
-	GHashTable *map;
 	struct Env *parent;
+	GHashTable *_map;
 
 	// if we keep track of children, it will be easier to free memory
-	GPtrArray *children;
+	GPtrArray *_children;
 } Env;
 
 Node *make_literal_int(int val);
@@ -111,15 +111,13 @@ Node *make_literal_float(double val);
 Node *make_literal_string(char *val);
 Node *make_literal_bool(bool val);
 Node *make_variable(char *name, Env *env);
-Node *make_def(char *name, Node *value);
+Node *make_def(VarPair *var);
 
-LetBinding *let_binding_create(char *name, Node *value_expr);
-void let_binding_free_v(void *data);
-Node *make_let(GPtrArray *bindings, GPtrArray *body, Env *env);
+Node *make_let(VarPairList *bindings, NodeList *body, Env *env);
 
 Node *
-make_function(GPtrArray *params, GPtrArray *body, Env *closure_env);
-Node *make_function_call(Node *fn, GPtrArray *args);
+make_function(StringList *params, NodeList *body, Env *closure_env);
+Node *make_function_call(Node *fn, NodeList *args);
 Node *
 make_if_expr(Node *condition, Node *then_branch, Node *else_branch);
 Node *make_quote(Node *quoted_expr);

@@ -34,6 +34,6 @@ ParserContext *parser_create(char *source_code);
 
 void parser_cleanup(ParserContext *ctx);
 
-GPtrArray *parser_parse(ParserContext *ctx);
+NodeList *parser_parse(ParserContext *ctx);
 
 void parser_print_errors(ParserContext *ctx);
