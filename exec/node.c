@@ -1,7 +1,7 @@
 #include "node.h"
 #include <assert.h>
 
-Node *make_literal_int(int val)
+Node *node_create_literal_int(int val)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -11,7 +11,7 @@ Node *make_literal_int(int val)
 	return n;
 }
 
-Node *make_literal_float(double val)
+Node *node_create_literal_float(double val)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -21,12 +21,12 @@ Node *make_literal_float(double val)
 	return n;
 }
 
-Node *make_literal_string(char *val)
+Node *node_create_literal_string(char *val)
 {
 	assert(false && "strings not implemented yet");
 }
 
-Node *make_literal_bool(bool val)
+Node *node_create_literal_bool(bool val)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -36,7 +36,7 @@ Node *make_literal_bool(bool val)
 	return n;
 }
 
-Node *make_variable(char *name, Env *env)
+Node *node_create_variable(char *name, Env *env)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -54,7 +54,7 @@ Node *get_placeholder(void)
 	return &n;
 }
 
-Node *make_def(VarPair *var)
+Node *node_create_def(VarBinding *var)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -63,7 +63,8 @@ Node *make_def(VarPair *var)
 	return n;
 }
 
-Node *make_let(VarPairList *bindings, NodeList *body, Env *env)
+Node *
+node_create_let(VarBindingArray *bindings, NodeArray *body, Env *env)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -74,8 +75,9 @@ Node *make_let(VarPairList *bindings, NodeList *body, Env *env)
 	return n;
 }
 
-Node *
-make_function(StringList *params, NodeList *body, Env *closure_env)
+Node *node_create_function(StringArray *params,
+						   NodeArray *body,
+						   Env *closure_env)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -86,7 +88,7 @@ make_function(StringList *params, NodeList *body, Env *closure_env)
 	return n;
 }
 
-Node *make_function_call(Node *fn, NodeList *args)
+Node *node_create_function_call(Node *fn, NodeArray *args)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -96,8 +98,9 @@ Node *make_function_call(Node *fn, NodeList *args)
 	return n;
 }
 
-Node *
-make_if_expr(Node *condition, Node *then_branch, Node *else_branch)
+Node *node_create_if_expr(Node *condition,
+						  Node *then_branch,
+						  Node *else_branch)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -108,7 +111,7 @@ make_if_expr(Node *condition, Node *then_branch, Node *else_branch)
 	return n;
 }
 
-Node *make_quote(Node *quoted_expr)
+Node *node_create_quote(Node *quoted_expr)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -154,22 +157,23 @@ Node *node_copy(const Node *original)
 		break;
 	case NODE_FUNCTION:
 		copy->function.param_names =
-			string_list_copy(original->function.param_names);
-		copy->function.body = node_list_copy(original->function.body);
+			string_array_copy(original->function.param_names);
+		copy->function.body =
+			node_array_copy(original->function.body);
 		copy->function.closure_env = original->function.closure_env;
 		break;
 	case NODE_LET:
 		copy->let.bindings =
-			var_pair_list_copy(original->let.bindings);
-		copy->let.body = node_list_copy(original->let.body);
+			var_binding_array_copy(original->let.bindings);
+		copy->let.body = node_array_copy(original->let.body);
 		copy->let.env = original->let.env;
 		break;
 	case NODE_CALL:
 		copy->call.fn = node_copy(original->call.fn);
-		copy->call.args = node_list_copy(original->call.args);
+		copy->call.args = node_array_copy(original->call.args);
 		break;
 	case NODE_DEF:
-		copy->def.binding = var_pair_copy(original->def.binding);
+		copy->def.binding = var_binding_copy(original->def.binding);
 		break;
 	case NODE_IF:
 		copy->if_expr.condition =
@@ -210,11 +214,11 @@ void node_free(Node *node)
 		free(node->variable.name);
 		break;
 	case NODE_FUNCTION:
-		string_list_cleanup(node->function.param_names);
-		node_list_cleanup(node->function.body);
+		string_array_free(node->function.param_names);
+		node_array_free(node->function.body);
 		break;
 	case NODE_CALL:
-		node_list_cleanup(node->call.args);
+		node_array_free(node->call.args);
 		node_free(node->call.fn);
 		break;
 	case NODE_IF:
@@ -223,11 +227,11 @@ void node_free(Node *node)
 		node_free(node->if_expr.else_branch);
 		break;
 	case NODE_DEF:
-		var_pair_free(node->def.binding);
+		var_binding_free(node->def.binding);
 		break;
 	case NODE_LET:
-		var_pair_list_cleanup(node->let.bindings);
-		node_list_cleanup(node->let.body);
+		var_binding_array_free(node->let.bindings);
+		node_array_free(node->let.body);
 		break;
 	case NODE_QUOTE:
 		node_free(node->quote.quoted_expr);

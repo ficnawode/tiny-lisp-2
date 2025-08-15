@@ -28,10 +28,10 @@ typedef enum LiteralType
 } LiteralType;
 
 typedef struct Node Node;
-typedef struct VarPair VarPair;
-typedef struct VarPairList VarPairList;
-typedef struct NodeList NodeList;
-typedef struct StringList StringList;
+typedef struct VarBinding VarBinding;
+typedef struct VarBindingArray VarBindingArray;
+typedef struct NodeArray NodeArray;
+typedef struct StringArray StringArray;
 
 typedef struct Env Env;
 
@@ -60,15 +60,15 @@ typedef struct Node
 
 		struct
 		{
-			StringList *param_names;
-			NodeList *body;
+			StringArray *param_names;
+			NodeArray *body;
 			Env *closure_env;
 		} function;
 
 		struct
 		{
 			Node *fn;
-			NodeList *args;
+			NodeArray *args;
 		} call;
 
 		struct
@@ -80,13 +80,13 @@ typedef struct Node
 
 		struct
 		{
-			VarPair *binding;
+			VarBinding *binding;
 		} def;
 
 		struct
 		{
-			VarPairList *bindings;
-			NodeList *body;
+			VarBindingArray *bindings;
+			NodeArray *body;
 			Env *env;
 		} let;
 
@@ -106,21 +106,24 @@ typedef struct Env
 	GPtrArray *_children;
 } Env;
 
-Node *make_literal_int(int val);
-Node *make_literal_float(double val);
-Node *make_literal_string(char *val);
-Node *make_literal_bool(bool val);
-Node *make_variable(char *name, Env *env);
-Node *make_def(VarPair *var);
-
-Node *make_let(VarPairList *bindings, NodeList *body, Env *env);
+Node *node_create_literal_int(int val);
+Node *node_create_literal_float(double val);
+Node *node_create_literal_string(char *val);
+Node *node_create_literal_bool(bool val);
+Node *node_create_variable(char *name, Env *env);
+Node *node_create_def(VarBinding *var);
 
 Node *
-make_function(StringList *params, NodeList *body, Env *closure_env);
-Node *make_function_call(Node *fn, NodeList *args);
-Node *
-make_if_expr(Node *condition, Node *then_branch, Node *else_branch);
-Node *make_quote(Node *quoted_expr);
+node_create_let(VarBindingArray *bindings, NodeArray *body, Env *env);
+
+Node *node_create_function(StringArray *params,
+						   NodeArray *body,
+						   Env *closure_env);
+Node *node_create_function_call(Node *fn, NodeArray *args);
+Node *node_create_if_expr(Node *condition,
+						  Node *then_branch,
+						  Node *else_branch);
+Node *node_create_quote(Node *quoted_expr);
 Node *get_placeholder(void);
 void node_free(Node *node);
 void node_free_v(void *node);

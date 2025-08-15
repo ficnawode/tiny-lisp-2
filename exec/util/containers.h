@@ -3,48 +3,47 @@
 
 typedef struct Node Node;
 
-typedef struct NodeList
+typedef struct NodeArray
 {
 	GPtrArray *_array;
-} NodeList;
+} NodeArray;
 
-NodeList *node_list_create(void);
-void node_list_emplace(NodeList *list, Node *element);
-Node *node_list_index(NodeList *list, int index);
-NodeList *node_list_copy(NodeList *list);
-void node_list_cleanup(NodeList *list);
+NodeArray *node_array_new(void);
+void node_array_add(NodeArray *array, Node *element);
+Node *node_array_index(NodeArray *list, int index);
+NodeArray *node_array_copy(NodeArray *list);
+void node_array_free(NodeArray *list);
 
-typedef struct StringList
+typedef struct StringArray
 {
 	GPtrArray *_array;
-} StringList;
+} StringArray;
 
-StringList *string_list_create(void);
-void string_list_emplace(StringList *list, char *element);
-char *string_list_index(StringList *list, int index);
-StringList *string_list_copy(StringList *list);
-void string_list_cleanup(StringList *list);
+StringArray *string_array_new(void);
+void string_array_add(StringArray *array, char *element);
+char *string_array_index(StringArray *array, int index);
+StringArray *string_array_copy(StringArray *array);
+void string_array_free(StringArray *array);
 
-typedef struct VarPair
+typedef struct VarBinding
 {
 	char *name;
 	Node *value_expr;
-} VarPair;
+} VarBinding;
 
-VarPair *var_pair_create(char *name, Node *value_expr);
-VarPair *var_pair_copy(const VarPair *original);
-void var_pair_free(VarPair *data);
+VarBinding *var_binding_create(char *name, Node *value_expr);
+VarBinding *var_binding_copy(const VarBinding *original);
+void var_binding_free(VarBinding *data);
 
-typedef struct VarPairList
+typedef struct VarBindingArray
 {
 	GPtrArray *_array;
-} VarPairList;
+} VarBindingArray;
 
-VarPairList *var_pair_list_create(void);
-void var_pair_list_emplace(VarPairList *list, VarPair *element);
-void var_pair_create_and_emplace(VarPairList *list,
-								 char *key,
-								 Node *val);
-VarPair *var_pair_list_index(VarPairList *list, int index);
-VarPairList *var_pair_list_copy(VarPairList *original);
-void var_pair_list_cleanup(VarPairList *list);
+VarBindingArray *var_binding_array_new(void);
+void var_binding_array_add(VarBindingArray *array,
+						   VarBinding *element);
+VarBinding *var_binding_array_index(VarBindingArray *array,
+									int index);
+VarBindingArray *var_binding_array_copy(VarBindingArray *original);
+void var_binding_array_free(VarBindingArray *array);

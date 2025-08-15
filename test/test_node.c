@@ -7,7 +7,7 @@
 static void test_variable(void)
 {
 	Env *env = env_create(NULL);
-	Node *node = make_variable("name1", env);
+	Node *node = node_create_variable("name1", env);
 	g_assert_cmpstr("name1", ==, node->variable.name);
 	node_free(node);
 	env_cleanup(env);
@@ -15,14 +15,14 @@ static void test_variable(void)
 
 static void _validate_float(double val)
 {
-	Node *node = make_literal_float(val);
+	Node *node = node_create_literal_float(val);
 	g_assert_cmpfloat(node->literal.f_val, ==, val);
 	node_free(node);
 }
 
 static void _validate_int(int val)
 {
-	Node *node = make_literal_int(val);
+	Node *node = node_create_literal_int(val);
 	g_assert(node->literal.i_val == val);
 	node_free(node);
 }
@@ -49,26 +49,26 @@ static void test_literals(void)
 
 static void test_func(void)
 {
-	StringList *params = string_list_create();
+	StringArray *params = string_array_new();
 
 	char *p1 = "foo";
 	char *p2 = "bar";
 	char *p3 = "baz";
-	string_list_emplace(params, p1);
-	string_list_emplace(params, p2);
-	string_list_emplace(params, p3);
+	string_array_add(params, p1);
+	string_array_add(params, p2);
+	string_array_add(params, p3);
 
-	Node *body_element = make_literal_float(3.14159);
-	NodeList *body = node_list_create();
-	node_list_emplace(body, body_element);
+	Node *body_element = node_create_literal_float(3.14159);
+	NodeArray *body = node_array_new();
+	node_array_add(body, body_element);
 	Env *env = env_create(NULL);
-	Node *node = make_function(params, body, env);
-	g_assert_cmpstr(p1, ==,
-					string_list_index(node->function.param_names, 0));
-	g_assert_cmpstr(p2, ==,
-					string_list_index(node->function.param_names, 1));
-	g_assert_cmpstr(p3, ==,
-					string_list_index(node->function.param_names, 2));
+	Node *node = node_create_function(params, body, env);
+	g_assert_cmpstr(
+		p1, ==, string_array_index(node->function.param_names, 0));
+	g_assert_cmpstr(
+		p2, ==, string_array_index(node->function.param_names, 1));
+	g_assert_cmpstr(
+		p3, ==, string_array_index(node->function.param_names, 2));
 
 	node_free(node);
 	env_cleanup(env);
@@ -76,10 +76,11 @@ static void test_func(void)
 
 static void test_ifexpr(void)
 {
-	Node *condition = make_literal_int(1);
-	Node *then_branch = make_literal_int(2);
-	Node *else_branch = make_literal_int(3);
-	Node *node = make_if_expr(condition, then_branch, else_branch);
+	Node *condition = node_create_literal_int(1);
+	Node *then_branch = node_create_literal_int(2);
+	Node *else_branch = node_create_literal_int(3);
+	Node *node =
+		node_create_if_expr(condition, then_branch, else_branch);
 
 	g_assert(node->if_expr.condition->literal.i_val == 1);
 	g_assert(node->if_expr.then_branch->literal.i_val == 2);
@@ -92,9 +93,9 @@ static void test_env(void)
 {
 	Env *env = env_create(NULL);
 
-	Node *p1 = make_literal_int(1);
-	Node *p2 = make_literal_int(2);
-	Node *p3 = make_literal_int(3);
+	Node *p1 = node_create_literal_int(1);
+	Node *p2 = node_create_literal_int(2);
+	Node *p3 = node_create_literal_int(3);
 
 	env_emplace(env, "p1", p1);
 	env_emplace(env, "p2", p2);
