@@ -256,32 +256,6 @@ Env *env_create(Env *parent)
 	e->_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 									node_free_v);
 	e->_children = g_ptr_array_new_with_free_func(env_cleanup_v);
-	return e;
-}
-
-static void
-env_copy_entry(gpointer key, gpointer value, gpointer user_data)
-{
-	GHashTable *new_table = user_data;
-	char *key_copy = g_strdup((char *)key);
-	Node *value_copy = node_copy((Node *)value);
-	g_hash_table_insert(new_table, key_copy, value_copy);
-}
-
-static GHashTable *hash_table_duplicate(GHashTable *original)
-{
-	GHashTable *new_table = g_hash_table_new_full(
-		g_str_hash, g_str_equal, g_free, node_free_v);
-	g_hash_table_foreach(original, env_copy_entry, new_table);
-	return new_table;
-}
-
-Env *env_copy(Env *parent)
-{
-	Env *e = malloc(sizeof(Env));
-	e->parent = parent;
-	e->_map = hash_table_duplicate(parent->_map);
-	e->_children = g_ptr_array_new_with_free_func(env_cleanup_v);
 	if (e->parent)
 	{
 		g_ptr_array_add(e->parent->_children, e);
@@ -293,9 +267,24 @@ void env_emplace(Env *env, char *name, Node *value)
 {
 	g_hash_table_insert(env->_map, strdup(name), node_copy(value));
 }
+
 Node *env_lookup(Env *env, const char *name)
 {
-	return (Node *)g_hash_table_lookup(env->_map, name);
+	Node *value = (Node *)g_hash_table_lookup(env->_map, name);
+	if (value)
+	{
+		return value;
+	}
+	else if (env->parent)
+	{
+		Node *parent_value = env_lookup(env->parent, name);
+		if (parent_value)
+		{
+			env_emplace(env, (char *)name, parent_value);
+			return (Node *)g_hash_table_lookup(env->_map, name);
+		}
+	}
+	return NULL;
 }
 
 void env_cleanup(Env *env)

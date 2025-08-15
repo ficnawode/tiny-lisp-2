@@ -177,7 +177,7 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 		return NULL;
 	}
 
-	Env *body_env = env_copy(env);
+	Env *body_env = env_create(env);
 	StringArray *params = string_array_new();
 
 	skip_whitespace_and_comments(ctx);
@@ -315,7 +315,7 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 	}
 
 	env_emplace(env, name, get_placeholder());
-	Env *body_env = env_copy(env);
+	Env *body_env = env_create(env);
 	for (guint i = 0; i < params->_array->len; i++)
 	{
 		env_emplace(body_env, string_array_index(params, i),
@@ -396,7 +396,7 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 		return NULL;
 	}
 
-	Env *let_env = env_copy(env);
+	Env *let_env = env_create(env);
 	VarBindingArray *bindings = var_binding_array_new();
 
 	skip_whitespace_and_comments(ctx);

@@ -130,7 +130,6 @@ void node_free_v(void *node);
 Node *node_copy(const Node *node);
 
 Env *env_create(Env *parent);
-Env *env_copy(Env *parent);
 void env_emplace(Env *env, char *name, Node *value);
 Node *env_lookup(Env *env, const char *name);
 void env_cleanup(Env *env);
