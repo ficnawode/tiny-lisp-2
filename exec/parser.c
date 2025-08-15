@@ -190,7 +190,8 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 			return NULL;
 		}
 		g_ptr_array_add(params, param_name);
-		env_emplace(body_env, param_name, make_placeholder());
+		env_emplace(body_env, param_name, get_placeholder());
+		free(param_name);
 		skip_whitespace_and_comments(ctx);
 	}
 
@@ -205,7 +206,7 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 	for (guint i = 0; i < params->len; i++)
 	{
 		char *param_name = g_ptr_array_index(params, i);
-		env_emplace(body_env, param_name, make_placeholder());
+		env_emplace(body_env, param_name, get_placeholder());
 	}
 
 	GPtrArray *body_expressions =
@@ -273,7 +274,9 @@ static Node *parse_def_variable(ParserContext *ctx, Env *env)
 	}
 	env_emplace(env, name, value);
 
-	return make_def(name, value);
+	Node *def_node = make_def(name, value);
+	free(name);
+	return def_node;
 }
 
 static Node *parse_def_function(ParserContext *ctx, Env *env)
@@ -308,12 +311,12 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 		return NULL;
 	}
 
-	env_emplace(env, name, make_placeholder());
+	env_emplace(env, name, get_placeholder());
 	Env *body_env = env_copy(env);
 	for (guint i = 0; i < params->len; i++)
 	{
 		env_emplace(body_env, (char *)g_ptr_array_index(params, i),
-					make_placeholder());
+					get_placeholder());
 	}
 
 	GPtrArray *body_expressions =
@@ -343,7 +346,9 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 	// env_emplace(body_env, name, function_node);
 	// env_emplace(env, name, function_node);
 
-	return make_def(name, function_node);
+	Node *def_node = make_def(name, function_node);
+	free(name);
+	return def_node;
 }
 
 static Node *parse_def(ParserContext *ctx, Env *env)
@@ -672,7 +677,7 @@ static void populate_global_env(Env *env)
 		sizeof(special_forms) / sizeof(special_forms[0]);
 	for (int i = 0; i < num_elements; i++)
 	{
-		env_emplace(env, special_forms[i], make_placeholder());
+		env_emplace(env, special_forms[i], get_placeholder());
 	}
 }
 

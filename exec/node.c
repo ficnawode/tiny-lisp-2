@@ -47,12 +47,11 @@ Node *make_variable(char *name, Env *env)
 	return n;
 }
 
-Node *make_placeholder(void)
+Node *get_placeholder(void)
 {
-	Node *n = malloc(sizeof(Node));
-	assert(n && "Out of memory");
-	n->type = NODE_PLACEHOLDER;
-	return n;
+	static Node n;
+	n.type = NODE_PLACEHOLDER;
+	return &n;
 }
 
 LetBinding *let_binding_create(char *name, Node *value_expr)

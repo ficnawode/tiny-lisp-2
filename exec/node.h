@@ -123,7 +123,7 @@ Node *make_function_call(Node *fn, GPtrArray *args);
 Node *
 make_if_expr(Node *condition, Node *then_branch, Node *else_branch);
 Node *make_quote(Node *quoted_expr);
-Node *make_placeholder(void);
+Node *get_placeholder(void);
 void node_free(Node *node);
 void node_free_v(void *node);
 Node *node_copy(const Node *node);
