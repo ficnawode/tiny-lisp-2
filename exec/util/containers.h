@@ -33,7 +33,7 @@ typedef struct VarBinding
 
 VarBinding *var_binding_create(char *name, Node *value_expr);
 VarBinding *var_binding_copy(const VarBinding *original);
-void var_binding_free(VarBinding *data);
+void var_binding_free(VarBinding *binding);
 
 typedef struct VarBindingArray
 {

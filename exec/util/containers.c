@@ -9,7 +9,7 @@ NodeArray *node_array_new(void)
 
 void node_array_add(NodeArray *array, Node *element)
 {
-	g_ptr_array_add(array->_array, node_copy(element));
+	g_ptr_array_add(array->_array, element);
 }
 
 Node *node_array_index(NodeArray *array, int index)
@@ -35,6 +35,7 @@ NodeArray *node_array_copy(NodeArray *original)
 void node_array_free(NodeArray *array)
 {
 	g_ptr_array_free(array->_array, TRUE);
+	free(array);
 }
 
 StringArray *string_array_new(void)
@@ -71,6 +72,7 @@ StringArray *string_array_copy(StringArray *original)
 void string_array_free(StringArray *array)
 {
 	g_ptr_array_free(array->_array, TRUE);
+	free(array);
 }
 
 VarBinding *var_binding_create(char *name, Node *value_expr)
@@ -90,6 +92,7 @@ void var_binding_free(VarBinding *pair)
 {
 	free(pair->name);
 	node_free(pair->value_expr);
+	free(pair);
 }
 
 static void var_binding_free_v(void *data)
@@ -109,7 +112,7 @@ VarBindingArray *var_binding_array_new(void)
 void var_binding_array_add(VarBindingArray *array,
 						   VarBinding *element)
 {
-	return g_ptr_array_add(array->_array, var_binding_copy(element));
+	return g_ptr_array_add(array->_array, element);
 }
 
 void var_binding_create_and_emplace(VarBindingArray *array,
@@ -133,8 +136,9 @@ VarBindingArray *var_binding_array_copy(VarBindingArray *original)
 	}
 	for (int i = 0; i < original->_array->len; i++)
 	{
-		var_binding_array_add(copy,
-							  var_binding_array_index(original, i));
+		var_binding_array_add(
+			copy,
+			var_binding_copy(var_binding_array_index(original, i)));
 	}
 	return copy;
 }
@@ -142,4 +146,5 @@ VarBindingArray *var_binding_array_copy(VarBindingArray *original)
 void var_binding_array_free(VarBindingArray *array)
 {
 	g_ptr_array_free(array->_array, TRUE);
+	free(array);
 }

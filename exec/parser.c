@@ -277,6 +277,7 @@ static Node *parse_def_variable(ParserContext *ctx, Env *env)
 	VarBinding *binding = var_binding_create(name, value);
 	Node *def_node = node_create_def(binding);
 	free(name);
+	node_free(value);
 	return def_node;
 }
 
@@ -301,6 +302,7 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 			return NULL;
 		}
 		string_array_add(params, param_name);
+		free(param_name);
 		skip_whitespace_and_comments(ctx);
 	}
 
@@ -350,6 +352,7 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 	VarBinding *binding = var_binding_create(name, function_node);
 	Node *def_node = node_create_def(binding);
 	free(name);
+	node_free(function_node);
 	return def_node;
 }
 
@@ -444,6 +447,7 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 		var_binding_array_add(bindings, binding);
 		env_emplace(let_env, name, value);
 		free(name);
+		node_free(value);
 		skip_whitespace_and_comments(ctx);
 	}
 	advance(ctx);
