@@ -102,7 +102,6 @@ void asm_file_writer_consolidate(AsmFileWriter *writer)
 	}
 
 	fprintf(final_file, "\nsection .text\n");
-	fprintf(final_file, "global _start\n\n");
 	if (append_file_contents(final_file, writer->text_filename) != 0)
 	{
 		return;

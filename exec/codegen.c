@@ -7,6 +7,9 @@ codegen_context_create(const char *output_prefix);
 static void codegen_context_cleanup(CodeGenContext *ctx);
 static void codegen_generate_node(CodeGenContext *ctx, Node *node);
 static void codegen_generate_literal(CodeGenContext *ctx, Node *node);
+static void codegen_generate_def(CodeGenContext *ctx, Node *node);
+static void codegen_generate_variable(CodeGenContext *ctx,
+									  Node *node);
 
 int get_next_label(void)
 {
@@ -14,47 +17,28 @@ int get_next_label(void)
 	return ++label_number;
 }
 
-static void codegen_env_push(CodeGenContext *ctx)
+static inline void write_prologue(CodeGenContext *ctx)
 {
-	// Key: char*, Value: VarLocation* (needs a value_destroy_func)
-	GHashTable *new_scope = g_hash_table_new_full(
-		g_str_hash, g_str_equal, g_free, g_free);
-	g_ptr_array_add(ctx->env_stack, new_scope);
-}
-
-static void codegen_env_pop(CodeGenContext *ctx)
-{
-	g_ptr_array_remove_index(ctx->env_stack, ctx->env_stack->len - 1);
-}
-
-static GHashTable *codegen_env_peek(CodeGenContext *ctx)
-{
-	return g_ptr_array_index(ctx->env_stack, ctx->env_stack->len - 1);
-}
-
-void codegen_compile_program(NodeArray *ast,
-							 const char *output_prefix)
-{
-	CodeGenContext *ctx = codegen_context_create(output_prefix);
-	if (!ctx)
-		return;
+	char *function_names[] = //
+		{"lispvalue_create_int", "lispvalue_create_float",
+		 "lisp_print"};
+	int num_elements =
+		sizeof(function_names) / sizeof(function_names[0]);
 
 	asm_file_writer_write_text(ctx->writer, "global main");
-	asm_file_writer_write_text(ctx->writer,
-							   "extern lispvalue_create_int");
-	asm_file_writer_write_text(ctx->writer,
-							   "extern lispvalue_create_float");
+	for (int i = 0; i < num_elements; i++)
+	{
+		asm_file_writer_write_text(ctx->writer, "extern %s",
+								   function_names[i]);
+	}
 	asm_file_writer_write_text(ctx->writer, "extern lisp_print");
 	asm_file_writer_write_text(ctx->writer, "main:");
 	asm_file_writer_write_text(ctx->writer, "push rbp");
 	asm_file_writer_write_text(ctx->writer, "mov rbp, rsp");
+}
 
-	for (guint i = 0; i < ast->_array->len; i++)
-	{
-		Node *node = g_ptr_array_index(ast->_array, i);
-		codegen_generate_node(ctx, node);
-	}
-
+static inline void write_epilogue(CodeGenContext *ctx)
+{
 	// Print whatever is left in RAX
 	asm_file_writer_write_text(ctx->writer, "mov rdi, rax");
 	asm_file_writer_write_text(ctx->writer, "call lisp_print");
@@ -65,6 +49,23 @@ void codegen_compile_program(NodeArray *ast,
 	asm_file_writer_write_text(ctx->writer,
 							   "mov rdi, 0"); // exit code 0
 	asm_file_writer_write_text(ctx->writer, "syscall");
+}
+
+void codegen_compile_program(NodeArray *ast,
+							 const char *output_prefix)
+{
+	CodeGenContext *ctx = codegen_context_create(output_prefix);
+	if (!ctx)
+		return;
+
+	write_prologue(ctx);
+
+	for (guint i = 0; i < ast->_array->len; i++)
+	{
+		Node *node = g_ptr_array_index(ast->_array, i);
+		codegen_generate_node(ctx, node);
+	}
+	write_epilogue(ctx);
 
 	asm_file_writer_consolidate(ctx->writer);
 	asm_file_writer_cleanup(ctx->writer);
@@ -79,6 +80,12 @@ static void codegen_generate_node(CodeGenContext *ctx, Node *node)
 	{
 	case NODE_LITERAL:
 		codegen_generate_literal(ctx, node);
+		break;
+	case NODE_DEF:
+		codegen_generate_def(ctx, node);
+		break;
+	case NODE_VARIABLE:
+		codegen_generate_variable(ctx, node);
 		break;
 	default:
 		fprintf(stderr,
@@ -125,10 +132,48 @@ static void codegen_generate_literal(CodeGenContext *ctx, Node *node)
 	}
 }
 
+static void codegen_generate_def(CodeGenContext *ctx, Node *node)
+{
+	assert(node->type == NODE_DEF);
+	VarBinding *binding = node->def.binding;
+	codegen_generate_node(ctx, binding->value_expr);
+	const char *label =
+		codegen_env_add_global_variable(ctx->env, binding->name);
+	asm_file_writer_write_data(ctx->writer, "%s: dq 0", label);
+	asm_file_writer_write_text(ctx->writer, "mov [%s], rax", label);
+}
+
+static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
+{
+	assert(node->type == NODE_VARIABLE);
+
+	const VarLocation *loc =
+		codegen_env_lookup(ctx->env, node->variable.name);
+
+	assert(loc &&
+		   "Undefined variable, should have been caught by parser?");
+
+	switch (loc->type)
+	{
+	case VAR_LOCATION_GLOBAL:
+		asm_file_writer_write_text(ctx->writer, "mov rax, [%s]",
+								   loc->global_label);
+		break;
+
+	case VAR_LOCATION_STACK:
+	case VAR_LOCATION_ENV:
+		printf("Codegen Error: Unimplemented variable location type "
+			   "for '%s'.\n",
+			   node->variable.name);
+		exit(1);
+		break;
+	}
+}
+
 static CodeGenContext *
 codegen_context_create(const char *output_prefix)
 {
-	CodeGenContext *ctx = g_new(CodeGenContext, 1);
+	CodeGenContext *ctx = malloc(sizeof(CodeGenContext));
 	ctx->writer = asm_file_writer_create(output_prefix);
 	if (!ctx->writer)
 	{
@@ -136,12 +181,8 @@ codegen_context_create(const char *output_prefix)
 		return NULL;
 	}
 
-	ctx->env_stack = g_ptr_array_new_with_free_func(
-		(GDestroyNotify)g_hash_table_destroy);
-	codegen_env_push(ctx);
-
-	ctx->stack_offset = 0;
-	ctx->label_counter = 0;
+	ctx->env = codegen_env_create();
+	codegen_env_enter_scope(ctx->env);
 	return ctx;
 }
 
@@ -149,6 +190,6 @@ static void codegen_context_cleanup(CodeGenContext *ctx)
 {
 	if (!ctx)
 		return;
-	g_ptr_array_free(ctx->env_stack, TRUE);
+	codegen_env_cleanup(ctx->env);
 	g_free(ctx);
 }
