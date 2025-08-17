@@ -10,6 +10,7 @@ static void codegen_generate_literal(CodeGenContext *ctx, Node *node);
 static void codegen_generate_def(CodeGenContext *ctx, Node *node);
 static void codegen_generate_variable(CodeGenContext *ctx,
 									  Node *node);
+static void codegen_generate_if(CodeGenContext *ctx, Node *node);
 
 int get_next_label(void)
 {
@@ -17,11 +18,35 @@ int get_next_label(void)
 	return ++label_number;
 }
 
+static CodeGenContext *
+codegen_context_create(const char *output_prefix)
+{
+	CodeGenContext *ctx = malloc(sizeof(CodeGenContext));
+	ctx->writer = asm_file_writer_create(output_prefix);
+	if (!ctx->writer)
+	{
+		free(ctx);
+		return NULL;
+	}
+
+	ctx->env = codegen_env_create();
+	codegen_env_enter_scope(ctx->env);
+	return ctx;
+}
+
+static void codegen_context_cleanup(CodeGenContext *ctx)
+{
+	if (!ctx)
+		return;
+	codegen_env_cleanup(ctx->env);
+	g_free(ctx);
+}
+
 static inline void write_prologue(CodeGenContext *ctx)
 {
 	char *function_names[] = //
 		{"lispvalue_create_int", "lispvalue_create_float",
-		 "lispvalue_create_bool", "lisp_print"};
+		 "lispvalue_create_bool", "lisp_is_truthy", "lisp_print"};
 	int num_elements =
 		sizeof(function_names) / sizeof(function_names[0]);
 
@@ -86,6 +111,9 @@ static void codegen_generate_node(CodeGenContext *ctx, Node *node)
 		break;
 	case NODE_VARIABLE:
 		codegen_generate_variable(ctx, node);
+		break;
+	case NODE_IF:
+		codegen_generate_if(ctx, node);
 		break;
 	default:
 		fprintf(stderr,
@@ -170,26 +198,35 @@ static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
 	}
 }
 
-static CodeGenContext *
-codegen_context_create(const char *output_prefix)
+static void codegen_generate_if(CodeGenContext *ctx, Node *node)
 {
-	CodeGenContext *ctx = malloc(sizeof(CodeGenContext));
-	ctx->writer = asm_file_writer_create(output_prefix);
-	if (!ctx->writer)
+	assert(node->type == NODE_IF);
+	int label_num = get_next_label();
+	char *else_label = g_strdup_printf("L_else_%d", label_num);
+	char *end_label = g_strdup_printf("L_end_if_%d", label_num);
+
+	codegen_generate_node(ctx, node->if_expr.condition);
+
+	asm_file_writer_write_text(ctx->writer, "mov rdi, rax");
+	asm_file_writer_write_text(ctx->writer, "call lisp_is_truthy");
+	asm_file_writer_write_text(ctx->writer, "cmp rax, 0");
+
+	asm_file_writer_write_text(ctx->writer, "je %s", else_label);
+	codegen_generate_node(ctx, node->if_expr.then_branch);
+	asm_file_writer_write_text(ctx->writer, "jmp %s", end_label);
+
+	asm_file_writer_write_text(ctx->writer, "%s:", else_label);
+
+	if (node->if_expr.else_branch)
 	{
-		g_free(ctx);
-		return NULL;
+		codegen_generate_node(ctx, node->if_expr.else_branch);
+	}
+	else
+	{
+		asm_file_writer_write_text(ctx->writer, "xor rax, rax");
 	}
 
-	ctx->env = codegen_env_create();
-	codegen_env_enter_scope(ctx->env);
-	return ctx;
-}
-
-static void codegen_context_cleanup(CodeGenContext *ctx)
-{
-	if (!ctx)
-		return;
-	codegen_env_cleanup(ctx->env);
-	g_free(ctx);
+	asm_file_writer_write_text(ctx->writer, "%s:", end_label);
+	free(else_label);
+	free(end_label);
 }

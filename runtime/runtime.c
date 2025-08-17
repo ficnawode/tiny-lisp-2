@@ -58,6 +58,27 @@ LispValue *lispvalue_create_bool(long value)
 }
 
 /**
+ * @brief Checks if a LispValue is truthy.
+ *
+ * ABI: Takes LispValue* in RDI. Returns 1 (truthy) or 0 (falsey) in
+ * RAX.
+ */
+long lisp_is_truthy(LispValue *val)
+{
+	if (!val || val->type == LISP_NIL)
+	{
+		return 0;
+	}
+
+	if (val->type == LISP_BOOL && val->as.b_val == false)
+	{
+		return 0;
+	}
+
+	return 1;
+}
+
+/**
  * @brief A simple print function for debugging.
  *
  * Can be called from assembly to inspect values on the stack or in
