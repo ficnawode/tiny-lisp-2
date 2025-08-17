@@ -2,6 +2,11 @@
 #include <assert.h>
 #include <stdarg.h>
 
+#define EMIT_TEXT(ctx, ...)                                          \
+	asm_file_writer_write_text((ctx)->writer, __VA_ARGS__)
+#define EMIT_DATA(ctx, ...)                                          \
+	asm_file_writer_write_data((ctx)->writer, __VA_ARGS__)
+
 static CodeGenContext *
 codegen_context_create(const char *output_prefix);
 static void codegen_context_cleanup(CodeGenContext *ctx);
@@ -50,30 +55,29 @@ static inline void write_prologue(CodeGenContext *ctx)
 	int num_elements =
 		sizeof(function_names) / sizeof(function_names[0]);
 
-	asm_file_writer_write_text(ctx->writer, "global main");
+	EMIT_TEXT(ctx, "global main");
 	for (int i = 0; i < num_elements; i++)
 	{
-		asm_file_writer_write_text(ctx->writer, "extern %s",
-								   function_names[i]);
+		EMIT_TEXT(ctx, "extern %s", function_names[i]);
 	}
-	asm_file_writer_write_text(ctx->writer, "extern lisp_print");
-	asm_file_writer_write_text(ctx->writer, "main:");
-	asm_file_writer_write_text(ctx->writer, "push rbp");
-	asm_file_writer_write_text(ctx->writer, "mov rbp, rsp");
+	EMIT_TEXT(ctx, "extern lisp_print");
+	EMIT_TEXT(ctx, "main:");
+	EMIT_TEXT(ctx, "push rbp");
+	EMIT_TEXT(ctx, "mov rbp, rsp");
 }
 
 static inline void write_epilogue(CodeGenContext *ctx)
 {
 	// Print whatever is left in RAX
-	asm_file_writer_write_text(ctx->writer, "mov rdi, rax");
-	asm_file_writer_write_text(ctx->writer, "call lisp_print");
+	EMIT_TEXT(ctx, "mov rdi, rax");
+	EMIT_TEXT(ctx, "call lisp_print");
 
 	// Exit the program
-	asm_file_writer_write_text(ctx->writer,
-							   "mov rax, 60"); // syscall exit
-	asm_file_writer_write_text(ctx->writer,
-							   "mov rdi, 0"); // exit code 0
-	asm_file_writer_write_text(ctx->writer, "syscall");
+	EMIT_TEXT(ctx,
+			  "mov rax, 60"); // syscall exit
+	EMIT_TEXT(ctx,
+			  "mov rdi, 0"); // exit code 0
+	EMIT_TEXT(ctx, "syscall");
 }
 
 void codegen_compile_program(NodeArray *ast,
@@ -129,28 +133,21 @@ static void codegen_generate_literal(CodeGenContext *ctx, Node *node)
 	switch (node->literal.lit_type)
 	{
 	case LIT_INT:
-		asm_file_writer_write_text(ctx->writer, "mov rdi, %d",
-								   node->literal.i_val);
-		asm_file_writer_write_text(ctx->writer,
-								   "call lispvalue_create_int");
+		EMIT_TEXT(ctx, "mov rdi, %d", node->literal.i_val);
+		EMIT_TEXT(ctx, "call lispvalue_create_int");
 		break;
 
 	case LIT_FLOAT:
 		char *label = g_strdup_printf("L_float_%d", get_next_label());
-		asm_file_writer_write_data(ctx->writer, "%s: dq %f", label,
-								   node->literal.f_val);
+		EMIT_DATA(ctx, "%s: dq %f", label, node->literal.f_val);
 
-		asm_file_writer_write_text(ctx->writer, "movsd xmm0, [%s]",
-								   label);
-		asm_file_writer_write_text(ctx->writer,
-								   "call lispvalue_create_float");
+		EMIT_TEXT(ctx, "movsd xmm0, [%s]", label);
+		EMIT_TEXT(ctx, "call lispvalue_create_float");
 		g_free(label);
 		break;
 	case LIT_BOOL:
-		asm_file_writer_write_text(ctx->writer, "mov rdi, %d",
-								   node->literal.b_val ? 1 : 0);
-		asm_file_writer_write_text(ctx->writer,
-								   "call lispvalue_create_bool");
+		EMIT_TEXT(ctx, "mov rdi, %d", node->literal.b_val ? 1 : 0);
+		EMIT_TEXT(ctx, "call lispvalue_create_bool");
 		break;
 
 	default:
@@ -167,8 +164,8 @@ static void codegen_generate_def(CodeGenContext *ctx, Node *node)
 	codegen_generate_node(ctx, binding->value_expr);
 	const char *label =
 		codegen_env_add_global_variable(ctx->env, binding->name);
-	asm_file_writer_write_data(ctx->writer, "%s: dq 0", label);
-	asm_file_writer_write_text(ctx->writer, "mov [%s], rax", label);
+	EMIT_DATA(ctx, "%s: dq 0", label);
+	EMIT_TEXT(ctx, "mov [%s], rax", label);
 }
 
 static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
@@ -184,8 +181,7 @@ static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
 	switch (loc->type)
 	{
 	case VAR_LOCATION_GLOBAL:
-		asm_file_writer_write_text(ctx->writer, "mov rax, [%s]",
-								   loc->global_label);
+		EMIT_TEXT(ctx, "mov rax, [%s]", loc->global_label);
 		break;
 
 	case VAR_LOCATION_STACK:
@@ -207,15 +203,15 @@ static void codegen_generate_if(CodeGenContext *ctx, Node *node)
 
 	codegen_generate_node(ctx, node->if_expr.condition);
 
-	asm_file_writer_write_text(ctx->writer, "mov rdi, rax");
-	asm_file_writer_write_text(ctx->writer, "call lisp_is_truthy");
-	asm_file_writer_write_text(ctx->writer, "cmp rax, 0");
+	EMIT_TEXT(ctx, "mov rdi, rax");
+	EMIT_TEXT(ctx, "call lisp_is_truthy");
+	EMIT_TEXT(ctx, "cmp rax, 0");
 
-	asm_file_writer_write_text(ctx->writer, "je %s", else_label);
+	EMIT_TEXT(ctx, "je %s", else_label);
 	codegen_generate_node(ctx, node->if_expr.then_branch);
-	asm_file_writer_write_text(ctx->writer, "jmp %s", end_label);
+	EMIT_TEXT(ctx, "jmp %s", end_label);
 
-	asm_file_writer_write_text(ctx->writer, "%s:", else_label);
+	EMIT_TEXT(ctx, "%s:", else_label);
 
 	if (node->if_expr.else_branch)
 	{
@@ -223,10 +219,10 @@ static void codegen_generate_if(CodeGenContext *ctx, Node *node)
 	}
 	else
 	{
-		asm_file_writer_write_text(ctx->writer, "xor rax, rax");
+		EMIT_TEXT(ctx, "xor rax, rax");
 	}
 
-	asm_file_writer_write_text(ctx->writer, "%s:", end_label);
+	EMIT_TEXT(ctx, "%s:", end_label);
 	free(else_label);
 	free(end_label);
 }
