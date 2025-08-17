@@ -16,11 +16,27 @@ static void codegen_generate_def(CodeGenContext *ctx, Node *node);
 static void codegen_generate_variable(CodeGenContext *ctx,
 									  Node *node);
 static void codegen_generate_if(CodeGenContext *ctx, Node *node);
+static void codegen_generate_let(CodeGenContext *ctx, Node *node);
+static void codegen_generate_call(CodeGenContext *ctx, Node *node);
+
+static const char *ARGUMENT_REGISTERS[] = {"rdi", "rsi", "rdx",
+										   "rcx", "r8",	 "r9"};
+static const int NUM_ARGUMENT_REGISTERS = 6;
 
 int get_next_label(void)
 {
 	static int label_number = 0;
 	return ++label_number;
+}
+
+static inline StringToStringMap *
+create_and_populate_builtin_func_map(void)
+{
+	StringToStringMap *map = string_to_string_map_new();
+	string_to_string_map_insert(map, "print-debug", "lisp_print");
+	string_to_string_map_insert(map, "+", "lisp_add");
+	string_to_string_map_insert(map, "-", "lisp_subtract");
+	return map;
 }
 
 static CodeGenContext *
@@ -34,6 +50,7 @@ codegen_context_create(const char *output_prefix)
 		return NULL;
 	}
 
+	ctx->builtin_func_map = create_and_populate_builtin_func_map();
 	ctx->env = codegen_env_create();
 	codegen_env_enter_scope(ctx->env);
 	return ctx;
@@ -44,23 +61,40 @@ static void codegen_context_cleanup(CodeGenContext *ctx)
 	if (!ctx)
 		return;
 	codegen_env_cleanup(ctx->env);
+	string_to_string_map_free(ctx->builtin_func_map);
+
 	g_free(ctx);
+}
+
+static void emit_extern_for_builtin(gpointer key,
+									gpointer value,
+									gpointer user_data)
+{
+	(void)key;
+
+	const char *c_function_label = (const char *)value;
+	CodeGenContext *ctx = (CodeGenContext *)user_data;
+
+	EMIT_TEXT(ctx, "extern %s", c_function_label);
 }
 
 static inline void write_prologue(CodeGenContext *ctx)
 {
-	char *function_names[] = //
+	char *core_runtime_functions[] = //
 		{"lispvalue_create_int", "lispvalue_create_float",
 		 "lispvalue_create_bool", "lisp_is_truthy", "lisp_print"};
-	int num_elements =
-		sizeof(function_names) / sizeof(function_names[0]);
+	int num_elements = sizeof(core_runtime_functions) /
+					   sizeof(core_runtime_functions[0]);
 
 	EMIT_TEXT(ctx, "global main");
+	EMIT_TEXT(ctx, "; Primitive operator functions declared extern");
 	for (int i = 0; i < num_elements; i++)
 	{
-		EMIT_TEXT(ctx, "extern %s", function_names[i]);
+		EMIT_TEXT(ctx, "extern %s", core_runtime_functions[i]);
 	}
-	EMIT_TEXT(ctx, "extern lisp_print");
+	EMIT_TEXT(ctx, "; Builtin functions declared extern");
+	g_hash_table_foreach(ctx->builtin_func_map->_map,
+						 emit_extern_for_builtin, ctx);
 	EMIT_TEXT(ctx, "main:");
 	EMIT_TEXT(ctx, "push rbp");
 	EMIT_TEXT(ctx, "mov rbp, rsp");
@@ -68,11 +102,6 @@ static inline void write_prologue(CodeGenContext *ctx)
 
 static inline void write_epilogue(CodeGenContext *ctx)
 {
-	// Print whatever is left in RAX
-	EMIT_TEXT(ctx, "mov rdi, rax");
-	EMIT_TEXT(ctx, "call lisp_print");
-
-	// Exit the program
 	EMIT_TEXT(ctx,
 			  "mov rax, 60"); // syscall exit
 	EMIT_TEXT(ctx,
@@ -118,6 +147,12 @@ static void codegen_generate_node(CodeGenContext *ctx, Node *node)
 		break;
 	case NODE_IF:
 		codegen_generate_if(ctx, node);
+		break;
+	case NODE_LET:
+		codegen_generate_let(ctx, node);
+		break;
+	case NODE_CALL:
+		codegen_generate_call(ctx, node);
 		break;
 	default:
 		fprintf(stderr,
@@ -185,6 +220,8 @@ static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
 		break;
 
 	case VAR_LOCATION_STACK:
+		EMIT_TEXT(ctx, "mov rax, [rbp + %d]", loc->stack_offset);
+		break;
 	case VAR_LOCATION_ENV:
 		printf("Codegen Error: Unimplemented variable location type "
 			   "for '%s'.\n",
@@ -225,4 +262,86 @@ static void codegen_generate_if(CodeGenContext *ctx, Node *node)
 	EMIT_TEXT(ctx, "%s:", end_label);
 	free(else_label);
 	free(end_label);
+}
+
+static void codegen_generate_let(CodeGenContext *ctx, Node *node)
+{
+	assert(node->type == NODE_LET);
+
+	codegen_env_enter_scope(ctx->env);
+
+	VarBindingArray *bindings = node->let.bindings;
+	for (guint i = 0; i < bindings->_array->len; i++)
+	{
+		VarBinding *binding = g_ptr_array_index(bindings->_array, i);
+		codegen_generate_node(ctx, binding->value_expr);
+		EMIT_TEXT(ctx, "push rax");
+		codegen_env_add_stack_variable(ctx->env, binding->name);
+	}
+
+	NodeArray *body = node->let.body;
+	for (guint i = 0; i < body->_array->len; i++)
+	{
+		Node *body_expr = g_ptr_array_index(body->_array, i);
+		codegen_generate_node(ctx, body_expr);
+	}
+
+	guint num_bindings = bindings->_array->len;
+	if (num_bindings > 0)
+	{
+		EMIT_TEXT(ctx, "add rsp, %d", num_bindings * 8);
+	}
+
+	codegen_env_exit_scope(ctx->env);
+}
+
+static inline int min(int a, int b) { return (a < b) ? a : b; }
+
+/**
+ * @brief as per the C ABI: evaluate all arguments, push them onto the
+ * stack. Load all possible arguments off the stack into their
+ * respective registers. Leave the surplus on the stack. Call
+ * function.
+ */
+static void codegen_generate_call(CodeGenContext *ctx, Node *node)
+{
+	assert(node->type == NODE_CALL);
+	assert(node->call.fn->type == NODE_VARIABLE &&
+		   "Calling non-variables not yet supported");
+
+	const char *operator_symbol = node->call.fn->variable.name;
+	const char *impl_label = string_to_string_map_lookup(
+		ctx->builtin_func_map, operator_symbol);
+
+	if (!impl_label)
+	{
+		printf("Codegen Error: Call to non-primitive function '%s' "
+			   "is not yet implemented.\n",
+			   operator_symbol);
+		exit(1);
+	}
+	NodeArray *args = node->call.args;
+	guint num_args = args->_array->len;
+
+	for (guint i = 0; i < num_args; i++)
+	{
+		Node *arg_node = g_ptr_array_index(args->_array, i);
+		codegen_generate_node(ctx, arg_node);
+		EMIT_TEXT(ctx, "push rax");
+	}
+
+	int regs_to_load = min(num_args, NUM_ARGUMENT_REGISTERS);
+	for (int i = regs_to_load - 1; i >= 0; i--)
+	{
+		EMIT_TEXT(ctx, "pop %s", ARGUMENT_REGISTERS[i]);
+	}
+
+	EMIT_TEXT(ctx, "call %s", impl_label);
+
+	if (num_args > NUM_ARGUMENT_REGISTERS)
+	{
+		int stack_args_bytes =
+			(num_args - NUM_ARGUMENT_REGISTERS) * 8;
+		EMIT_TEXT(ctx, "add rsp, %d", stack_args_bytes);
+	}
 }

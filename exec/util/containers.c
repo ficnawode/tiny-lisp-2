@@ -148,3 +148,32 @@ void var_binding_array_free(VarBindingArray *array)
 	g_ptr_array_free(array->_array, TRUE);
 	free(array);
 }
+
+StringToStringMap *string_to_string_map_new(void)
+{
+	StringToStringMap *s_map = malloc(sizeof(StringToStringMap));
+	s_map->_map = g_hash_table_new_full(g_str_hash, g_str_equal,
+										g_free, g_free);
+	return s_map;
+}
+
+void string_to_string_map_insert(StringToStringMap *map,
+								 const char *key,
+								 const char *value)
+{
+	g_hash_table_insert(map->_map, g_strdup(key), g_strdup(value));
+}
+
+const char *string_to_string_map_lookup(StringToStringMap *map,
+										const char *key)
+{
+	return (const char *)g_hash_table_lookup(map->_map, key);
+}
+
+void string_to_string_map_free(StringToStringMap *map)
+{
+	if (!map)
+		return;
+	g_hash_table_destroy(map->_map);
+	free(map);
+}

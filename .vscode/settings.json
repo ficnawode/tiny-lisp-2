@@ -25,6 +25,8 @@
         "system_error": "c",
         "functional": "c",
         "type_traits": "c",
-        "utility": "c"
+        "utility": "c",
+        "asm_file_writer.h": "c",
+        "codegen_env.h": "c"
     }
 }

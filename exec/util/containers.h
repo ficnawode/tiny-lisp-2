@@ -47,3 +47,16 @@ VarBinding *var_binding_array_index(VarBindingArray *array,
 									int index);
 VarBindingArray *var_binding_array_copy(VarBindingArray *original);
 void var_binding_array_free(VarBindingArray *array);
+
+typedef struct StringToStringMap
+{
+	GHashTable *_map;
+} StringToStringMap;
+
+StringToStringMap *string_to_string_map_new(void);
+void string_to_string_map_insert(StringToStringMap *map,
+								 const char *key,
+								 const char *value);
+const char *string_to_string_map_lookup(StringToStringMap *map,
+										const char *key);
+void string_to_string_map_free(StringToStringMap *map);

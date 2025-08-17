@@ -676,9 +676,10 @@ static Node *parse_list(ParserContext *ctx, ParserEnv *env)
 
 static void populate_global_env(ParserEnv *env)
 {
-	char *special_forms[] = {"+",	   "-",	 "/",	"*",	"=",
-							 "<",	   ">",	 ">=",	"<=",	"let",
-							 "lambda", "if", "def", "quote"};
+	char *special_forms[] = {
+		"+",	  "-",	"/",   "*",		"=",
+		"<",	  ">",	">=",  "<=",	"let",
+		"lambda", "if", "def", "quote", "print-debug"};
 	int num_elements =
 		sizeof(special_forms) / sizeof(special_forms[0]);
 	for (int i = 0; i < num_elements; i++)
