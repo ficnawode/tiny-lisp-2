@@ -15,3 +15,5 @@ file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/test_*.c")
 foreach(TEST_SRC IN LISTS TEST_SOURCES)
     add_glib_test(${TEST_SRC})
 endforeach()
+
+add_subdirectory(lisp)

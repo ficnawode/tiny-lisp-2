@@ -75,7 +75,7 @@ static int append_file_contents(FILE *dest, const char *src_filename)
 	return 0;
 }
 
-int asm_file_writer_consolidate(AsmFileWriter *writer)
+void asm_file_writer_consolidate(AsmFileWriter *writer)
 {
 	fflush(writer->data_file);
 	fflush(writer->text_file);
@@ -89,7 +89,7 @@ int asm_file_writer_consolidate(AsmFileWriter *writer)
 	{
 		perror("Failed to open final assembly file");
 		free(final_filename);
-		return -1;
+		return;
 	}
 
 	fprintf(final_file, "; Generated Assembly File: %s\n\n",
@@ -97,12 +97,16 @@ int asm_file_writer_consolidate(AsmFileWriter *writer)
 
 	fprintf(final_file, "section .data\n");
 	if (append_file_contents(final_file, writer->data_filename) != 0)
-		return -1;
+	{
+		return;
+	}
 
 	fprintf(final_file, "\nsection .text\n");
 	fprintf(final_file, "global _start\n\n");
 	if (append_file_contents(final_file, writer->text_filename) != 0)
-		return -1;
+	{
+		return;
+	}
 
 	fclose(final_file);
 	free(final_filename);
@@ -110,7 +114,7 @@ int asm_file_writer_consolidate(AsmFileWriter *writer)
 	remove(writer->data_filename);
 	remove(writer->text_filename);
 
-	return 0;
+	return;
 }
 
 void asm_file_writer_write_text(AsmFileWriter *writer,
