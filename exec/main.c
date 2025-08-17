@@ -112,16 +112,9 @@ int main(int argc, char **argv)
 	printf("--- Generating assembly with prefix: %s ---\n",
 		   output_prefix);
 
-	int codegen_result = codegen_compile_program(ast, output_prefix);
+	codegen_compile_program(ast, output_prefix);
 
 	node_array_free(ast);
-
-	if (codegen_result != 0)
-	{
-		printf("Code generation failed.\n");
-		free(output_prefix);
-		return 1;
-	}
 
 	printf("\nCompilation successful!\n");
 	printf("Generated: %s.asm\n\n", output_prefix);

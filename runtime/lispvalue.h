@@ -36,7 +36,8 @@ struct LispValue
 		struct
 		{
 			void (*code_ptr)(void); // Pointer to a native function
-			LispValue *env; // Environment (likely a list of values)
+			LispValue
+				*env; // ParserEnvironment (likely a list of values)
 		} closure;
 
 	} as;

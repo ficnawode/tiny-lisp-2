@@ -2,19 +2,20 @@
 #include <assert.h>
 #include <stdio.h>
 
-static Node *parse_expression(ParserContext *ctx, Env *env);
-static Node *parse_list(ParserContext *ctx, Env *env);
-static Node *parse_atom(ParserContext *ctx, Env *env);
+static Node *parse_expression(ParserContext *ctx, ParserEnv *env);
+static Node *parse_list(ParserContext *ctx, ParserEnv *env);
+static Node *parse_atom(ParserContext *ctx, ParserEnv *env);
 static char *parse_undefined_symbol(ParserContext *ctx);
-static Node *parse_ifexpr(ParserContext *ctx, Env *env);
-static Node *parse_def(ParserContext *ctx, Env *env);
-static Node *parse_let(ParserContext *ctx, Env *env);
-static Node *parse_function(ParserContext *ctx, Env *env);
-static Node *parse_quote(ParserContext *ctx, Env *env);
+static Node *parse_ifexpr(ParserContext *ctx, ParserEnv *env);
+static Node *parse_def(ParserContext *ctx, ParserEnv *env);
+static Node *parse_let(ParserContext *ctx, ParserEnv *env);
+static Node *parse_function(ParserContext *ctx, ParserEnv *env);
+static Node *parse_quote(ParserContext *ctx, ParserEnv *env);
 static void synchronize(ParserContext *ctx);
 static void skip_whitespace_and_comments(struct ParserContext *ctx);
 
-typedef Node *(*SpecialFormParser)(ParserContext *ctx, Env *env);
+typedef Node *(*SpecialFormParser)(ParserContext *ctx,
+								   ParserEnv *env);
 
 static const struct
 {
@@ -127,7 +128,7 @@ static bool consume(ParserContext *ctx,
 	return false;
 }
 
-static Node *parse_ifexpr(ParserContext *ctx, Env *env)
+static Node *parse_ifexpr(ParserContext *ctx, ParserEnv *env)
 {
 	Node *condition = parse_expression(ctx, env);
 	if (condition == NULL)
@@ -169,7 +170,7 @@ static Node *parse_ifexpr(ParserContext *ctx, Env *env)
 	return node_create_if_expr(condition, then_branch, else_branch);
 }
 
-static Node *parse_function(ParserContext *ctx, Env *env)
+static Node *parse_function(ParserContext *ctx, ParserEnv *env)
 {
 	if (!consume(ctx, TOKEN_LPAREN,
 				 "Expected '(' for function parameter list."))
@@ -177,7 +178,7 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 		return NULL;
 	}
 
-	Env *body_env = env_create(env);
+	ParserEnv *body_env = parser_env_create(env);
 	StringArray *params = string_array_new();
 
 	skip_whitespace_and_comments(ctx);
@@ -187,11 +188,11 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 		if (param_name == NULL)
 		{
 			string_array_free(params);
-			env_cleanup(body_env);
+			parser_env_cleanup(body_env);
 			return NULL;
 		}
 		string_array_add(params, param_name);
-		env_emplace(body_env, param_name, get_placeholder());
+		parser_env_emplace(body_env, param_name, get_placeholder());
 		free(param_name);
 		skip_whitespace_and_comments(ctx);
 	}
@@ -200,14 +201,14 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 				 "Expected ')' to close parameter list."))
 	{
 		string_array_free(params);
-		env_cleanup(body_env);
+		parser_env_cleanup(body_env);
 		return NULL;
 	}
 
 	for (guint i = 0; i < params->_array->len; i++)
 	{
 		char *param_name = string_array_index(params, i);
-		env_emplace(body_env, param_name, get_placeholder());
+		parser_env_emplace(body_env, param_name, get_placeholder());
 	}
 
 	NodeArray *body_expressions = node_array_new();
@@ -226,7 +227,7 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 				ctx, "Failed to parse expression in function body.");
 			string_array_free(params);
 			node_array_free(body_expressions);
-			env_cleanup(body_env);
+			parser_env_cleanup(body_env);
 			return NULL;
 		}
 		skip_whitespace_and_comments(ctx);
@@ -237,13 +238,13 @@ static Node *parse_function(ParserContext *ctx, Env *env)
 		error_at_current_token(ctx, "Function body cannot be empty.");
 		string_array_free(params);
 		node_array_copy(body_expressions);
-		env_cleanup(body_env);
+		parser_env_cleanup(body_env);
 		return NULL;
 	}
 
 	return node_create_function(params, body_expressions, env);
 }
-static Node *parse_def_variable(ParserContext *ctx, Env *env)
+static Node *parse_def_variable(ParserContext *ctx, ParserEnv *env)
 {
 	char *name = strdup(ctx->current_token.lexeme);
 	advance(ctx);
@@ -264,7 +265,7 @@ static Node *parse_def_variable(ParserContext *ctx, Env *env)
 		return NULL;
 	}
 
-	if (env_lookup(env, name) != NULL)
+	if (parser_env_lookup(env, name) != NULL)
 	{
 		char *warning_msg;
 		asprintf(&warning_msg, "Redefinition of variable '%s'", name);
@@ -273,7 +274,7 @@ static Node *parse_def_variable(ParserContext *ctx, Env *env)
 		free(warning_msg);
 	}
 
-	env_emplace(env, name, value);
+	parser_env_emplace(env, name, value);
 	VarBinding *binding = var_binding_create(name, value);
 	Node *def_node = node_create_def(binding);
 	free(name);
@@ -281,7 +282,7 @@ static Node *parse_def_variable(ParserContext *ctx, Env *env)
 	return def_node;
 }
 
-static Node *parse_def_function(ParserContext *ctx, Env *env)
+static Node *parse_def_function(ParserContext *ctx, ParserEnv *env)
 {
 	consume(ctx, TOKEN_LPAREN,
 			"Expected '(' after def for function signature.");
@@ -314,12 +315,12 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 		return NULL;
 	}
 
-	env_emplace(env, name, get_placeholder());
-	Env *body_env = env_create(env);
+	parser_env_emplace(env, name, get_placeholder());
+	ParserEnv *body_env = parser_env_create(env);
 	for (guint i = 0; i < params->_array->len; i++)
 	{
-		env_emplace(body_env, string_array_index(params, i),
-					get_placeholder());
+		parser_env_emplace(body_env, string_array_index(params, i),
+						   get_placeholder());
 	}
 
 	NodeArray *body_expressions = node_array_new();
@@ -336,7 +337,7 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 		{
 			string_array_free(params);
 			node_array_free(body_expressions);
-			env_cleanup(body_env);
+			parser_env_cleanup(body_env);
 			free(name);
 			return NULL;
 		}
@@ -346,8 +347,8 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 	Node *function_node =
 		node_create_function(params, body_expressions, env);
 
-	// env_emplace(body_env, name, function_node);
-	// env_emplace(env, name, function_node);
+	// parser_env_emplace(body_env, name, function_node);
+	// parser_env_emplace(env, name, function_node);
 
 	VarBinding *binding = var_binding_create(name, function_node);
 	Node *def_node = node_create_def(binding);
@@ -356,7 +357,7 @@ static Node *parse_def_function(ParserContext *ctx, Env *env)
 	return def_node;
 }
 
-static Node *parse_def(ParserContext *ctx, Env *env)
+static Node *parse_def(ParserContext *ctx, ParserEnv *env)
 {
 	skip_whitespace_and_comments(ctx);
 
@@ -389,14 +390,14 @@ static char *parse_undefined_symbol(ParserContext *ctx)
 	return name;
 }
 
-static Node *parse_let(ParserContext *ctx, Env *env)
+static Node *parse_let(ParserContext *ctx, ParserEnv *env)
 {
 	if (!consume(ctx, TOKEN_LPAREN, "Expected '(' for let-bindings."))
 	{
 		return NULL;
 	}
 
-	Env *let_env = env_create(env);
+	ParserEnv *let_env = parser_env_create(env);
 	VarBindingArray *bindings = var_binding_array_new();
 
 	skip_whitespace_and_comments(ctx);
@@ -406,7 +407,7 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 					 "Expected '(' for a binding pair."))
 		{
 			var_binding_array_free(bindings);
-			env_cleanup(let_env);
+			parser_env_cleanup(let_env);
 			return NULL;
 		}
 
@@ -416,7 +417,7 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 			error_at_current_token(
 				ctx, "Expected a symbol for binding name.");
 			var_binding_array_free(bindings);
-			env_cleanup(let_env);
+			parser_env_cleanup(let_env);
 			return NULL;
 		}
 		char *name = strdup(ctx->current_token.lexeme);
@@ -427,11 +428,11 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 		{
 			free(name);
 			var_binding_array_free(bindings);
-			env_cleanup(let_env);
+			parser_env_cleanup(let_env);
 			return NULL;
 		}
 
-		env_emplace(let_env, name, value);
+		parser_env_emplace(let_env, name, value);
 
 		if (!consume(ctx, TOKEN_RPAREN,
 					 "Expected ')' to close binding pair."))
@@ -439,13 +440,13 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 			free(name);
 			node_free(value);
 			var_binding_array_free(bindings);
-			env_cleanup(let_env);
+			parser_env_cleanup(let_env);
 			return NULL;
 		}
 
 		VarBinding *binding = var_binding_create(name, value);
 		var_binding_array_add(bindings, binding);
-		env_emplace(let_env, name, value);
+		parser_env_emplace(let_env, name, value);
 		free(name);
 		node_free(value);
 		skip_whitespace_and_comments(ctx);
@@ -468,7 +469,7 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 				ctx, "Failed to parse expression in let body.");
 			var_binding_array_free(bindings);
 			node_array_free(body_expressions);
-			env_cleanup(let_env);
+			parser_env_cleanup(let_env);
 			return NULL;
 		}
 		skip_whitespace_and_comments(ctx);
@@ -479,14 +480,14 @@ static Node *parse_let(ParserContext *ctx, Env *env)
 		error_at_current_token(ctx, "Let body cannot be empty.");
 		var_binding_array_free(bindings);
 		node_array_free(body_expressions);
-		env_cleanup(let_env);
+		parser_env_cleanup(let_env);
 		return NULL;
 	}
 
 	return node_create_let(bindings, body_expressions, let_env);
 }
 
-static Node *parse_quote(ParserContext *ctx, Env *env)
+static Node *parse_quote(ParserContext *ctx, ParserEnv *env)
 {
 	Node *quoted_expr = parse_expression(ctx, env);
 	if (quoted_expr == NULL)
@@ -494,7 +495,8 @@ static Node *parse_quote(ParserContext *ctx, Env *env)
 	return node_create_quote(quoted_expr);
 }
 
-static Node *parse_call(ParserContext *ctx, Node *callable, Env *env)
+static Node *
+parse_call(ParserContext *ctx, Node *callable, ParserEnv *env)
 {
 	NodeArray *args = node_array_new();
 
@@ -515,7 +517,7 @@ static Node *parse_call(ParserContext *ctx, Node *callable, Env *env)
 	return node_create_function_call(callable, args);
 }
 
-static Node *parse_expression(ParserContext *ctx, Env *env)
+static Node *parse_expression(ParserContext *ctx, ParserEnv *env)
 {
 	skip_whitespace_and_comments(ctx);
 	switch (ctx->current_token.type)
@@ -557,7 +559,7 @@ static Node *parse_literal_number(Token *token)
 }
 
 static Node *
-parse_literal_symbol(ParserContext *ctx, Token *token, Env *env)
+parse_literal_symbol(ParserContext *ctx, Token *token, ParserEnv *env)
 {
 	if (strcmp(token->lexeme, "#t") == 0)
 	{
@@ -569,7 +571,7 @@ parse_literal_symbol(ParserContext *ctx, Token *token, Env *env)
 	}
 	else
 	{
-		if (env_lookup(env, token->lexeme) == NULL)
+		if (parser_env_lookup(env, token->lexeme) == NULL)
 		{
 			char *error_msg;
 			asprintf(&error_msg, "Undefined variable: '%s'",
@@ -583,7 +585,7 @@ parse_literal_symbol(ParserContext *ctx, Token *token, Env *env)
 	}
 }
 
-static Node *parse_atom(ParserContext *ctx, Env *env)
+static Node *parse_atom(ParserContext *ctx, ParserEnv *env)
 {
 	const Token *token = &ctx->current_token;
 	Node *res = NULL;
@@ -627,7 +629,7 @@ static void synchronize(ParserContext *ctx)
 	}
 }
 
-static Node *parse_list(ParserContext *ctx, Env *env)
+static Node *parse_list(ParserContext *ctx, ParserEnv *env)
 {
 	consume(ctx, TOKEN_LPAREN, "");
 
@@ -672,7 +674,7 @@ static Node *parse_list(ParserContext *ctx, Env *env)
 	return result_node;
 }
 
-static void populate_global_env(Env *env)
+static void populate_global_env(ParserEnv *env)
 {
 	char *special_forms[] = {"+",	   "-",	 "/",	"*",	"=",
 							 "<",	   ">",	 ">=",	"<=",	"let",
@@ -681,7 +683,7 @@ static void populate_global_env(Env *env)
 		sizeof(special_forms) / sizeof(special_forms[0]);
 	for (int i = 0; i < num_elements; i++)
 	{
-		env_emplace(env, special_forms[i], get_placeholder());
+		parser_env_emplace(env, special_forms[i], get_placeholder());
 	}
 }
 
@@ -691,7 +693,7 @@ ParserContext *parser_create(char *source_code)
 	assert(ctx && "Out of memory");
 
 	ctx->lexer = lexer_create(source_code);
-	ctx->global_env = env_create(NULL);
+	ctx->global_env = parser_env_create(NULL);
 	populate_global_env(ctx->global_env);
 	ctx->panic_mode = false;
 	ctx->errors =
@@ -714,7 +716,7 @@ void parser_cleanup(ParserContext *ctx)
 	}
 	token_cleanup(&ctx->current_token);
 	g_ptr_array_free(ctx->errors, TRUE);
-	env_cleanup(ctx->global_env);
+	parser_env_cleanup(ctx->global_env);
 	lexer_cleanup(ctx->lexer);
 	free(ctx);
 }

@@ -6,11 +6,11 @@
 
 static void test_variable(void)
 {
-	Env *env = env_create(NULL);
+	ParserEnv *env = parser_env_create(NULL);
 	Node *node = node_create_variable("name1", env);
 	g_assert_cmpstr("name1", ==, node->variable.name);
 	node_free(node);
-	env_cleanup(env);
+	parser_env_cleanup(env);
 }
 
 static void _validate_float(double val)
@@ -61,7 +61,7 @@ static void test_func(void)
 	Node *body_element = node_create_literal_float(3.14159);
 	NodeArray *body = node_array_new();
 	node_array_add(body, body_element);
-	Env *env = env_create(NULL);
+	ParserEnv *env = parser_env_create(NULL);
 	Node *node = node_create_function(params, body, env);
 	g_assert_cmpstr(
 		p1, ==, string_array_index(node->function.param_names, 0));
@@ -71,7 +71,7 @@ static void test_func(void)
 		p3, ==, string_array_index(node->function.param_names, 2));
 
 	node_free(node);
-	env_cleanup(env);
+	parser_env_cleanup(env);
 }
 
 static void test_ifexpr(void)
@@ -91,30 +91,30 @@ static void test_ifexpr(void)
 
 static void test_env(void)
 {
-	Env *env = env_create(NULL);
+	ParserEnv *env = parser_env_create(NULL);
 
 	Node *p1 = node_create_literal_int(1);
 	Node *p2 = node_create_literal_int(2);
 	Node *p3 = node_create_literal_int(3);
 
-	env_emplace(env, "p1", p1);
-	env_emplace(env, "p2", p2);
-	env_emplace(env, "p3", p3);
+	parser_env_emplace(env, "p1", p1);
+	parser_env_emplace(env, "p2", p2);
+	parser_env_emplace(env, "p3", p3);
 
 	// env emplace is a deep copy of both string and node
 	node_free(p1);
 	node_free(p2);
 	node_free(p3);
 
-	Node *p1_lookup = env_lookup(env, "p1");
-	Node *p2_lookup = env_lookup(env, "p2");
-	Node *p3_lookup = env_lookup(env, "p3");
+	Node *p1_lookup = parser_env_lookup(env, "p1");
+	Node *p2_lookup = parser_env_lookup(env, "p2");
+	Node *p3_lookup = parser_env_lookup(env, "p3");
 
 	g_assert(p1_lookup->literal.i_val == 1);
 	g_assert(p2_lookup->literal.i_val == 2);
 	g_assert(p3_lookup->literal.i_val == 3);
 
-	env_cleanup(env);
+	parser_env_cleanup(env);
 }
 
 int main(int argc, char *argv[])

@@ -24,7 +24,7 @@ typedef struct ParserContext
 
 	Token current_token;
 
-	Env *global_env;
+	ParserEnv *global_env;
 
 	GPtrArray *errors;
 	bool panic_mode;

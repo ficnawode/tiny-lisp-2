@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "parser_env.h"
 #include "util/containers.h"
 
 typedef enum NodeType
@@ -33,7 +34,7 @@ typedef struct VarBindingArray VarBindingArray;
 typedef struct NodeArray NodeArray;
 typedef struct StringArray StringArray;
 
-typedef struct Env Env;
+typedef struct ParserEnv ParserEnv;
 
 typedef struct Node
 {
@@ -55,14 +56,14 @@ typedef struct Node
 		struct
 		{
 			char *name;
-			Env *env;
+			ParserEnv *env;
 		} variable;
 
 		struct
 		{
 			StringArray *param_names;
 			NodeArray *body;
-			Env *closure_env;
+			ParserEnv *closure_env;
 		} function;
 
 		struct
@@ -87,7 +88,7 @@ typedef struct Node
 		{
 			VarBindingArray *bindings;
 			NodeArray *body;
-			Env *env;
+			ParserEnv *env;
 		} let;
 
 		struct
@@ -97,28 +98,20 @@ typedef struct Node
 	};
 } Node;
 
-typedef struct Env
-{
-	struct Env *parent;
-	GHashTable *_map;
-
-	// if we keep track of children, it will be easier to free memory
-	GPtrArray *_children;
-} Env;
-
 Node *node_create_literal_int(int val);
 Node *node_create_literal_float(double val);
 Node *node_create_literal_string(char *val);
 Node *node_create_literal_bool(bool val);
-Node *node_create_variable(char *name, Env *env);
+Node *node_create_variable(char *name, ParserEnv *env);
 Node *node_create_def(VarBinding *var);
 
-Node *
-node_create_let(VarBindingArray *bindings, NodeArray *body, Env *env);
+Node *node_create_let(VarBindingArray *bindings,
+					  NodeArray *body,
+					  ParserEnv *env);
 
 Node *node_create_function(StringArray *params,
 						   NodeArray *body,
-						   Env *closure_env);
+						   ParserEnv *closure_env);
 Node *node_create_function_call(Node *fn, NodeArray *args);
 Node *node_create_if_expr(Node *condition,
 						  Node *then_branch,
@@ -128,8 +121,3 @@ Node *get_placeholder(void);
 void node_free(Node *node);
 void node_free_v(void *node);
 Node *node_copy(const Node *node);
-
-Env *env_create(Env *parent);
-void env_emplace(Env *env, char *name, Node *value);
-Node *env_lookup(Env *env, const char *name);
-void env_cleanup(Env *env);

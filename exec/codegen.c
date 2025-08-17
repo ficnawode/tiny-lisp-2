@@ -37,7 +37,7 @@ void codegen_compile_program(NodeArray *ast,
 {
 	CodeGenContext *ctx = codegen_context_create(output_prefix);
 	if (!ctx)
-		return -1;
+		return;
 
 	asm_file_writer_write_text(ctx->writer, "global main");
 	asm_file_writer_write_text(ctx->writer,

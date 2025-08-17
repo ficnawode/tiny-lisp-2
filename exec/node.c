@@ -36,7 +36,7 @@ Node *node_create_literal_bool(bool val)
 	return n;
 }
 
-Node *node_create_variable(char *name, Env *env)
+Node *node_create_variable(char *name, ParserEnv *env)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -63,8 +63,9 @@ Node *node_create_def(VarBinding *var)
 	return n;
 }
 
-Node *
-node_create_let(VarBindingArray *bindings, NodeArray *body, Env *env)
+Node *node_create_let(VarBindingArray *bindings,
+					  NodeArray *body,
+					  ParserEnv *env)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -77,7 +78,7 @@ node_create_let(VarBindingArray *bindings, NodeArray *body, Env *env)
 
 Node *node_create_function(StringArray *params,
 						   NodeArray *body,
-						   Env *closure_env)
+						   ParserEnv *closure_env)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
@@ -246,55 +247,3 @@ void node_free(Node *node)
 }
 
 void node_free_v(void *data) { node_free((Node *)data); }
-
-void env_cleanup_v(void *data) { env_cleanup((Env *)data); }
-
-Env *env_create(Env *parent)
-{
-	Env *e = malloc(sizeof(Env));
-	e->parent = parent;
-	e->_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-									node_free_v);
-	e->_children = g_ptr_array_new_with_free_func(env_cleanup_v);
-	if (e->parent)
-	{
-		g_ptr_array_add(e->parent->_children, e);
-	}
-	return e;
-}
-
-void env_emplace(Env *env, char *name, Node *value)
-{
-	g_hash_table_insert(env->_map, strdup(name), node_copy(value));
-}
-
-Node *env_lookup(Env *env, const char *name)
-{
-	Node *value = (Node *)g_hash_table_lookup(env->_map, name);
-	if (value)
-	{
-		return value;
-	}
-	else if (env->parent)
-	{
-		Node *parent_value = env_lookup(env->parent, name);
-		if (parent_value)
-		{
-			env_emplace(env, (char *)name, parent_value);
-			return (Node *)g_hash_table_lookup(env->_map, name);
-		}
-	}
-	return NULL;
-}
-
-void env_cleanup(Env *env)
-{
-	if (!env)
-	{
-		return;
-	}
-	g_hash_table_destroy(env->_map);
-	g_ptr_array_free(env->_children, TRUE);
-	free(env);
-	env = NULL;
-}
