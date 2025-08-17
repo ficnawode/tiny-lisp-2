@@ -42,6 +42,22 @@ LispValue *lispvalue_create_float(double value)
 }
 
 /**
+ * @brief Creates a new LispValue of type bool on the heap.
+ *
+ * ABI: The integer argument (`value`) will be in RDI. 0 is false,
+ * non-zero is true. The return value (the pointer) will be in RAX.
+ */
+LispValue *lispvalue_create_bool(long value)
+{
+	LispValue *lv = malloc(sizeof(LispValue));
+	assert(lv && "Runtime error: Out of memory");
+
+	lv->type = LISP_BOOL;
+	lv->as.b_val = (value != 0);
+	return lv;
+}
+
+/**
  * @brief A simple print function for debugging.
  *
  * Can be called from assembly to inspect values on the stack or in

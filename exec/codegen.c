@@ -21,7 +21,7 @@ static inline void write_prologue(CodeGenContext *ctx)
 {
 	char *function_names[] = //
 		{"lispvalue_create_int", "lispvalue_create_float",
-		 "lisp_print"};
+		 "lispvalue_create_bool", "lisp_print"};
 	int num_elements =
 		sizeof(function_names) / sizeof(function_names[0]);
 
@@ -101,33 +101,33 @@ static void codegen_generate_literal(CodeGenContext *ctx, Node *node)
 	switch (node->literal.lit_type)
 	{
 	case LIT_INT:
-		// Load the arg (int) into RDI
 		asm_file_writer_write_text(ctx->writer, "mov rdi, %d",
 								   node->literal.i_val);
 		asm_file_writer_write_text(ctx->writer,
 								   "call lispvalue_create_int");
-		// The result (LispValue*) is now in RAX
 		break;
 
 	case LIT_FLOAT:
-	{
 		char *label = g_strdup_printf("L_float_%d", get_next_label());
 		asm_file_writer_write_data(ctx->writer, "%s: dq %f", label,
 								   node->literal.f_val);
 
-		// Load the arg (float) from data section into XMM0
 		asm_file_writer_write_text(ctx->writer, "movsd xmm0, [%s]",
 								   label);
 		asm_file_writer_write_text(ctx->writer,
 								   "call lispvalue_create_float");
 		g_free(label);
-	}
-	break;
+		break;
+	case LIT_BOOL:
+		asm_file_writer_write_text(ctx->writer, "mov rdi, %d",
+								   node->literal.b_val ? 1 : 0);
+		asm_file_writer_write_text(ctx->writer,
+								   "call lispvalue_create_bool");
+		break;
 
 	default:
-		fprintf(stderr,
-				"Codegen Error: Unimplemented literal type %d\n",
-				node->literal.lit_type);
+		printf("Codegen Error: Unimplemented literal type %d\n",
+			   node->literal.lit_type);
 		exit(1);
 	}
 }
