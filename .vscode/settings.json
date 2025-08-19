@@ -1,4 +1,5 @@
 {
+    "debug.allowBreakpointsEverywhere": true,
     "files.associations": {
         "lexer.h": "c",
         "token.h": "c",

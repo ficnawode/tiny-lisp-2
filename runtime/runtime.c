@@ -48,6 +48,79 @@ LispValue *lispvalue_create_bool(long value)
 	return lv;
 }
 
+LispCell *lispcell_create(LispValue *initial_value)
+{
+	LispCell *cell = malloc(sizeof(LispCell));
+	assert(cell && "Out of memory");
+	cell->value = initial_value;
+	return cell;
+}
+
+LispValue *lispvalue_create_cell(LispCell *cell)
+{
+	LispValue *lv = malloc(sizeof(LispValue));
+	runtime_assert(lv, "Out of memory");
+	lv->type = LISP_CELL;
+	lv->as.cell = cell;
+	return lv;
+}
+
+LispValue *lispvalue_create_closure(void (*code_ptr)(void),
+									int arity,
+									int num_free_vars,
+									...)
+{
+	size_t total_size = sizeof(LispClosureObject) +
+						(num_free_vars * sizeof(LispValue *));
+	LispClosureObject *closure_obj =
+		(LispClosureObject *)malloc(total_size);
+	runtime_assert(closure_obj, "Out of memory creating closure");
+
+	closure_obj->type = LISP_CLOSURE;
+	closure_obj->code_ptr = code_ptr;
+	closure_obj->arity = arity;
+	closure_obj->num_free_vars = num_free_vars;
+
+	va_list args;
+	va_start(args, num_free_vars);
+	for (int i = 0; i < num_free_vars; i++)
+	{
+		LispValue *free_var = va_arg(args, LispValue *);
+
+		// If a NULL is passed for a free variable, it's a placeholder
+		// for the closure to reference itself (for recursion).
+		if (free_var == NULL)
+		{
+			closure_obj->free_vars[i] = (LispValue *)closure_obj;
+		}
+		else
+		{
+			closure_obj->free_vars[i] = free_var;
+		}
+	}
+	va_end(args);
+
+	return (LispValue *)closure_obj;
+}
+
+void lispvalue_free(LispValue *val)
+{
+	if (!val)
+		return;
+	switch (val->type)
+	{
+	case LISP_CLOSURE:
+		break;
+	case LISP_STRING:
+	case LISP_SYMBOL:
+		free(val->as.s_val);
+		break;
+	default:
+		break;
+	}
+	free(val);
+}
+
 long lisp_is_truthy(LispValue *val)
 {
 	if (!val || val->type == LISP_NIL)
@@ -99,7 +172,11 @@ void lisp_print(LispValue *val)
 		printf(" ...)");
 		break;
 	case LISP_CLOSURE:
-		printf("#<closure:%p>", val->as.closure.code_ptr);
+		LispClosureObject *closure_obj = (LispClosureObject *)val;
+		printf("#<closure:%p arity:%ld free:%ld>",
+			   closure_obj->code_ptr, closure_obj->arity,
+			   closure_obj->num_free_vars);
+		break;
 		break;
 	default:
 		printf("#<unknown_type:%d>", val->type);
@@ -173,4 +250,40 @@ static double op_sub_float(double a, double b) { return a - b; }
 LispValue *lisp_subtract(LispValue *a, LispValue *b)
 {
 	return lisp_execute_numeric_op(a, b, op_sub_int, op_sub_float);
+}
+
+static long op_mult_int(long a, long b) { return a * b; }
+static double op_mult_float(double a, double b) { return a * b; }
+LispValue *lisp_multiply(LispValue *a, LispValue *b)
+{
+	return lisp_execute_numeric_op(a, b, op_mult_int, op_mult_float);
+}
+
+LispValue *lisp_equal(LispValue *a, LispValue *b)
+{
+	runtime_assert(a && b, "NULL argument to '='");
+
+	//  (= 1 1.0) should be true
+	if ((a->type == LISP_INT || a->type == LISP_FLOAT) &&
+		(b->type == LISP_INT || b->type == LISP_FLOAT))
+	{
+		double val_a = get_numeric_value_as_double(a);
+		double val_b = get_numeric_value_as_double(b);
+		return lispvalue_create_bool(val_a == val_b);
+	}
+
+	if (a->type != b->type)
+	{
+		return lispvalue_create_bool(false);
+	}
+
+	switch (a->type)
+	{
+	case LISP_BOOL:
+		return lispvalue_create_bool(a->as.b_val == b->as.b_val);
+	case LISP_NIL:
+		return lispvalue_create_bool(true); // nil == nil
+	default:
+		return lispvalue_create_bool(a == b);
+	}
 }

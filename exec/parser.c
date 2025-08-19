@@ -27,6 +27,15 @@ static const struct
 	{"quote", parse_quote},
 };
 
+static void g_hash_table_keys_to_string_array(gpointer key,
+											  gpointer value,
+											  gpointer user_data)
+{
+	(void)value;
+	StringArray *array = (StringArray *)user_data;
+	string_array_add(array, (char *)key);
+}
+
 static SpecialFormParser find_special_form_parser(const char *name)
 {
 	for (size_t i = 0;
@@ -237,12 +246,19 @@ static Node *parse_function(ParserContext *ctx, ParserEnv *env)
 	{
 		error_at_current_token(ctx, "Function body cannot be empty.");
 		string_array_free(params);
-		node_array_copy(body_expressions);
-		parser_env_cleanup(body_env);
+		node_array_free(body_expressions);
+		// body_env is a child of env, so it will be cleaned up
+		// when its parent is.
 		return NULL;
 	}
-
-	return node_create_function(params, body_expressions, env);
+	StringArray *free_vars = string_array_new();
+	g_hash_table_foreach(body_env->free_vars,
+						 g_hash_table_keys_to_string_array,
+						 free_vars);
+	// sort to get deterministic order in lookup
+	g_ptr_array_sort(free_vars->_array, (GCompareFunc)g_strcmp0);
+	return node_create_function(params, free_vars, body_expressions,
+								env);
 }
 static Node *parse_def_variable(ParserContext *ctx, ParserEnv *env)
 {
@@ -274,7 +290,7 @@ static Node *parse_def_variable(ParserContext *ctx, ParserEnv *env)
 		free(warning_msg);
 	}
 
-	parser_env_emplace(env, name, value);
+	parser_env_emplace(ctx->global_env, name, value);
 	VarBinding *binding = var_binding_create(name, value);
 	Node *def_node = node_create_def(binding);
 	free(name);
@@ -315,7 +331,7 @@ static Node *parse_def_function(ParserContext *ctx, ParserEnv *env)
 		return NULL;
 	}
 
-	parser_env_emplace(env, name, get_placeholder());
+	parser_env_emplace(ctx->global_env, name, get_placeholder());
 	ParserEnv *body_env = parser_env_create(env);
 	for (guint i = 0; i < params->_array->len; i++)
 	{
@@ -344,8 +360,12 @@ static Node *parse_def_function(ParserContext *ctx, ParserEnv *env)
 		skip_whitespace_and_comments(ctx);
 	}
 
-	Node *function_node =
-		node_create_function(params, body_expressions, env);
+	StringArray *free_vars = string_array_new();
+	g_hash_table_foreach(body_env->free_vars,
+						 g_hash_table_keys_to_string_array,
+						 free_vars);
+	Node *function_node = node_create_function(params, free_vars,
+											   body_expressions, env);
 
 	// parser_env_emplace(body_env, name, function_node);
 	// parser_env_emplace(env, name, function_node);
@@ -674,20 +694,6 @@ static Node *parse_list(ParserContext *ctx, ParserEnv *env)
 	return result_node;
 }
 
-static void populate_global_env(ParserEnv *env)
-{
-	char *special_forms[] = {
-		"+",	  "-",	"/",   "*",		"=",
-		"<",	  ">",	">=",  "<=",	"let",
-		"lambda", "if", "def", "quote", "print-debug"};
-	int num_elements =
-		sizeof(special_forms) / sizeof(special_forms[0]);
-	for (int i = 0; i < num_elements; i++)
-	{
-		parser_env_emplace(env, special_forms[i], get_placeholder());
-	}
-}
-
 ParserContext *parser_create(char *source_code)
 {
 	ParserContext *ctx = malloc(sizeof(ParserContext));
@@ -695,7 +701,6 @@ ParserContext *parser_create(char *source_code)
 
 	ctx->lexer = lexer_create(source_code);
 	ctx->global_env = parser_env_create(NULL);
-	populate_global_env(ctx->global_env);
 	ctx->panic_mode = false;
 	ctx->errors =
 		g_ptr_array_new_with_free_func(parser_error_cleanup_v);

@@ -62,7 +62,8 @@ static void test_func(void)
 	NodeArray *body = node_array_new();
 	node_array_add(body, body_element);
 	ParserEnv *env = parser_env_create(NULL);
-	Node *node = node_create_function(params, body, env);
+	StringArray *free_vars = string_array_new();
+	Node *node = node_create_function(params, free_vars, body, env);
 	g_assert_cmpstr(
 		p1, ==, string_array_index(node->function.param_names, 0));
 	g_assert_cmpstr(

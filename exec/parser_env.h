@@ -9,6 +9,10 @@ typedef struct ParserEnv
 	struct ParserEnv *parent;
 	GHashTable *_map;
 
+	// A set of names of free variables identified within this scope.
+	// Only relevant for function body environments.
+	GHashTable *free_vars;
+
 	// keep track of children -> only free parent environment, the
 	// rest will be freed automatically
 	GPtrArray *_children;

@@ -62,6 +62,7 @@ typedef struct Node
 		struct
 		{
 			StringArray *param_names;
+			StringArray *free_var_names;
 			NodeArray *body;
 			ParserEnv *closure_env;
 		} function;
@@ -110,6 +111,7 @@ Node *node_create_let(VarBindingArray *bindings,
 					  ParserEnv *env);
 
 Node *node_create_function(StringArray *params,
+						   StringArray *free_vars,
 						   NodeArray *body,
 						   ParserEnv *closure_env);
 Node *node_create_function_call(Node *fn, NodeArray *args);

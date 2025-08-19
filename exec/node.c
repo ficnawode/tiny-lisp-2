@@ -77,12 +77,14 @@ Node *node_create_let(VarBindingArray *bindings,
 }
 
 Node *node_create_function(StringArray *params,
+						   StringArray *free_vars,
 						   NodeArray *body,
 						   ParserEnv *closure_env)
 {
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
 	n->type = NODE_FUNCTION;
+	n->function.free_var_names = free_vars;
 	n->function.closure_env = closure_env;
 	n->function.body = body;
 	n->function.param_names = params;
@@ -159,6 +161,8 @@ Node *node_copy(const Node *original)
 	case NODE_FUNCTION:
 		copy->function.param_names =
 			string_array_copy(original->function.param_names);
+		copy->function.free_var_names =
+			string_array_copy(original->function.free_var_names);
 		copy->function.body =
 			node_array_copy(original->function.body);
 		copy->function.closure_env = original->function.closure_env;
@@ -216,6 +220,8 @@ void node_free(Node *node)
 		break;
 	case NODE_FUNCTION:
 		string_array_free(node->function.param_names);
+		string_array_free(node->function.free_var_names);
+
 		node_array_free(node->function.body);
 		break;
 	case NODE_CALL:

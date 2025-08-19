@@ -308,6 +308,36 @@ static void test_def_named_function_recursive(void)
 	CLEANUP_TEST(parser, node_array);
 }
 
+static void test_closure_free_var_capture(void)
+{
+	// z is global so it will not be captured
+	// y is local so must be captured
+	char *source_code =
+		"(def z 1) (let ((x 10)) (lambda (y) (+ x y z)))";
+	ParserContext *parser;
+	NodeArray *node_array;
+
+	SETUP_TEST(source_code, parser, node_array);
+
+	if (parser->errors->len > 0)
+		parser_print_errors(parser);
+	g_assert_cmpint(parser->errors->len, ==, 0);
+
+	g_assert_cmpint(node_array->_array->len, ==, 2);
+	Node *let_node = node_array_index(node_array, 1);
+	g_assert_cmpint(let_node->type, ==, NODE_LET);
+
+	Node *func_node = node_array_index(let_node->let.body, 0);
+	g_assert_cmpint(func_node->type, ==, NODE_FUNCTION);
+
+	StringArray *free_vars = func_node->function.free_var_names;
+	g_assert_nonnull(free_vars);
+	g_assert_cmpint(free_vars->_array->len, ==, 1);
+	g_assert_cmpstr(string_array_index(free_vars, 0), ==, "x");
+
+	CLEANUP_TEST(parser, node_array);
+}
+
 int main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
@@ -320,6 +350,8 @@ int main(int argc, char **argv)
 					test_funcdef_no_params);
 	g_test_add_func("/parser/funcdef/with_params",
 					test_funcdef_with_params);
+	g_test_add_func("/parser/closure/free_var_capture",
+					test_closure_free_var_capture);
 	g_test_add_func("/parser/let", test_let_multiple_body_exprs);
 	g_test_add_func("/parser/def", test_def);
 	g_test_add_func("/parser/deffunc",

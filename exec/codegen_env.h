@@ -65,4 +65,10 @@ const VarLocation *codegen_env_lookup(CodeGenEnv *env,
  * @brief Resets the stack offset counter. Call this at the start of a
  * new function body.
  */
-void codegen_env_reset_stack_offset(CodeGenEnv *env);
+void codegen_env_reset_stack_offset(CodeGenEnv *env,
+									int initial_offset);
+
+int codegen_env_get_stack_offset(CodeGenEnv *env);
+void codegen_env_set_stack_offset(CodeGenEnv *env, int offset);
+void codegen_env_add_stack_space(CodeGenEnv *env, int bytes);
+void codegen_env_remove_stack_space(CodeGenEnv *env, int bytes);

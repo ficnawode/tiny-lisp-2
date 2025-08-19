@@ -1,4 +1,3 @@
-enable_testing()
 
 macro(add_glib_test TEST_SRC)
     get_filename_component(TEST_NAME "${TEST_SRC}" NAME_WE)

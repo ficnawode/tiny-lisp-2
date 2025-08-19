@@ -1,5 +1,6 @@
 #pragma once
 
+#include <glib.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -15,7 +16,22 @@ typedef enum
 	LISP_SYMBOL,  // A heap-allocated, null-terminated string
 	LISP_CONS,	  // A (car . cdr) pair
 	LISP_CLOSURE, // A function with its captured environment
+	LISP_CELL
 } LispValueType;
+
+typedef struct
+{
+	LispValueType type; // must be LISP_CLOSURE
+	void (*code_ptr)(void);
+	long arity;
+	long num_free_vars;
+	LispValue *free_vars[];
+} LispClosureObject;
+
+typedef struct LispCell
+{
+	LispValue *value;
+} LispCell;
 
 struct LispValue
 {
@@ -33,12 +49,7 @@ struct LispValue
 			LispValue *cdr; // Rest of the list
 		} cons;
 
-		struct
-		{
-			void (*code_ptr)(void); // Pointer to a native function
-			LispValue
-				*env; // ParserEnvironment (likely a list of values)
-		} closure;
-
+		void *closure_obj;
+		LispCell *cell;
 	} as;
 };

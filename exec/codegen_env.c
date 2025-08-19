@@ -31,7 +31,7 @@ CodeGenEnv *codegen_env_create(void)
 	env->scope_stack = g_ptr_array_new_with_free_func(
 		(GDestroyNotify)g_hash_table_destroy);
 	codegen_env_enter_scope(env);
-	codegen_env_reset_stack_offset(env);
+	codegen_env_reset_stack_offset(env, 0);
 	return env;
 }
 
@@ -58,9 +58,10 @@ void codegen_env_exit_scope(CodeGenEnv *env)
 							 env->scope_stack->len - 1);
 }
 
-void codegen_env_reset_stack_offset(CodeGenEnv *env)
+void codegen_env_reset_stack_offset(CodeGenEnv *env,
+									int initial_offset)
 {
-	env->current_stack_offset = 0;
+	env->current_stack_offset = initial_offset;
 }
 
 int codegen_env_add_stack_variable(CodeGenEnv *env, const char *name)
@@ -146,4 +147,26 @@ const VarLocation *codegen_env_lookup(CodeGenEnv *env,
 		}
 	}
 	return NULL;
+}
+
+int codegen_env_get_stack_offset(CodeGenEnv *env)
+{
+	return env->current_stack_offset;
+}
+
+void codegen_env_set_stack_offset(CodeGenEnv *env, int offset)
+{
+	env->current_stack_offset = offset;
+}
+
+void codegen_env_add_stack_space(CodeGenEnv *env, int bytes)
+{
+	assert(bytes % 8 == 0 && "stack space must be multiple of 8");
+	env->current_stack_offset -= bytes;
+}
+
+void codegen_env_remove_stack_space(CodeGenEnv *env, int bytes)
+{
+	assert(bytes % 8 == 0 && "stack space must be multiple of 8");
+	env->current_stack_offset += bytes;
 }
