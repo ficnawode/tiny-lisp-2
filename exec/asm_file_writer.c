@@ -39,6 +39,39 @@ AsmFileWriter *asm_file_writer_create(const char *prefix)
 	return writer;
 }
 
+AsmFileWriter *asm_file_writer_create_mock(FILE *text, FILE *data)
+{
+	AsmFileWriter *writer = malloc(sizeof(AsmFileWriter));
+	assert(writer && "Out of memory");
+
+	char *prefix = "mock";
+	writer->file_prefix = strdup(prefix);
+
+	asprintf(&writer->data_filename, "%s.data.tmp.s", prefix);
+	asprintf(&writer->text_filename, "%s.text.tmp.s", prefix);
+	assert(writer->data_filename && writer->text_filename &&
+		   "Out of memory");
+
+	writer->data_file = data;
+	writer->text_file = text;
+
+	if (!writer->data_file || !writer->text_file)
+	{
+		assert(false && "Failed to open temporary assembly files");
+		if (writer->data_file)
+			fclose(writer->data_file);
+		if (writer->text_file)
+			fclose(writer->text_file);
+		free(writer->file_prefix);
+		free(writer->data_filename);
+		free(writer->text_filename);
+		free(writer);
+		return NULL;
+	}
+
+	return writer;
+}
+
 void asm_file_writer_cleanup(AsmFileWriter *writer)
 {
 	if (!writer)

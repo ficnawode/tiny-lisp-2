@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "asm_emitter.h"
 #include <assert.h>
 #include <stdarg.h>
 

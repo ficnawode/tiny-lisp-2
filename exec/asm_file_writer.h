@@ -15,6 +15,7 @@ typedef struct AsmFileWriter
 } AsmFileWriter;
 
 AsmFileWriter *asm_file_writer_create(const char *prefix);
+AsmFileWriter *asm_file_writer_create_mock(FILE *text, FILE *data);
 
 void asm_file_writer_cleanup(AsmFileWriter *writer);
 
