@@ -3,10 +3,7 @@
 #include <assert.h>
 #include <stdarg.h>
 
-#define EMIT_TEXT(ctx, ...)                                          \
-	asm_file_writer_write_text((ctx)->writer, __VA_ARGS__)
-#define EMIT_DATA(ctx, ...)                                          \
-	asm_file_writer_write_data((ctx)->writer, __VA_ARGS__)
+#include "lispvalue.h"
 
 static CodeGenContext *
 codegen_context_create(const char *output_prefix);
@@ -25,6 +22,8 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 static void codegen_generate_function(CodeGenContext *ctx,
 									  Node *node);
 
+static const enum Register ARGUMENT_REGS[] = {
+	REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
 static const char *ARGUMENT_REGISTERS[] = {"rdi", "rsi", "rdx",
 										   "rcx", "r8",	 "r9"};
 static const int NUM_ARGUMENT_REGISTERS = 6;
@@ -83,7 +82,7 @@ static void emit_extern_for_builtin(gpointer key,
 	const char *c_function_label = (const char *)value;
 	CodeGenContext *ctx = (CodeGenContext *)user_data;
 
-	EMIT_TEXT(ctx, "extern %s", c_function_label);
+	emit_extern(ctx->writer, value, "");
 }
 
 static inline void write_prologue(CodeGenContext *ctx)
@@ -96,25 +95,28 @@ static inline void write_prologue(CodeGenContext *ctx)
 	int num_elements = sizeof(core_runtime_functions) /
 					   sizeof(core_runtime_functions[0]);
 
-	EMIT_TEXT(ctx, "global main");
-	EMIT_TEXT(ctx, "; Core runtime functions declared extern");
+	emit_global(ctx->writer, "main", "");
+
+	emit_comment(ctx->writer,
+				 "; Core runtime functions declared extern");
 	for (int i = 0; i < num_elements; i++)
 	{
-		EMIT_TEXT(ctx, "extern %s", core_runtime_functions[i]);
+		emit_extern(ctx->writer, core_runtime_functions[i], "");
 	}
-	EMIT_TEXT(ctx, "; Builtin functions declared extern");
+
+	emit_comment(ctx->writer, "; Builtin functions declared extern");
 	g_hash_table_foreach(ctx->builtin_func_map->_map,
 						 emit_extern_for_builtin, ctx);
-	EMIT_TEXT(ctx, "main:");
-	EMIT_TEXT(ctx, "push rbp");
-	EMIT_TEXT(ctx, "mov rbp, rsp");
+	emit_label(ctx->writer, "main", "");
+	emit_push_reg(ctx->writer, REG_RBP, "");
+	emit_mov_reg_reg(ctx->writer, REG_RBP, REG_RSP, "");
 }
 
 static inline void write_epilogue(CodeGenContext *ctx)
 {
-	EMIT_TEXT(ctx, "mov rax, 60");
-	EMIT_TEXT(ctx, "mov rdi, 0");
-	EMIT_TEXT(ctx, "syscall");
+	emit_mov_reg_imm(ctx->writer, REG_RAX, 60, "arg1");
+	emit_mov_reg_imm(ctx->writer, REG_RDI, 0, "arg2");
+	emit_syscall(ctx->writer, "");
 }
 
 void codegen_compile_program(NodeArray *ast,
@@ -137,7 +139,6 @@ void codegen_compile_program(NodeArray *ast,
 	asm_file_writer_consolidate(ctx->writer);
 	asm_file_writer_cleanup(ctx->writer);
 	codegen_context_cleanup(ctx);
-
 	return;
 }
 
@@ -174,34 +175,73 @@ static void codegen_generate_node(CodeGenContext *ctx, Node *node)
 	}
 }
 
+static inline void codegen_generate_literal_int(CodeGenContext *ctx,
+												Node *node)
+{
+	emit_mov_reg_imm(ctx->writer, REG_RDI, node->literal.i_val,
+					 "int literal");
+	emit_call_label(ctx->writer, "lispvalue_create_int", "");
+}
+static inline void codegen_generate_literal_float(CodeGenContext *ctx,
+												  Node *node)
+{
+	char *label = g_strdup_printf("L_float_%d", get_next_label());
+	double f_val = node->literal.f_val;
+	emit_data_dq_float(ctx->writer, label, f_val, "");
+	emit_movsd_reg_global(ctx->writer, REG_XMM0, label, "");
+	emit_call_label(ctx->writer, "lispvalue_create_float", "");
+	g_free(label);
+}
+static inline void codegen_generate_literal_bool(CodeGenContext *ctx,
+												 Node *node)
+{
+	int64_t b_val = node->literal.b_val ? 1 : 0;
+	emit_mov_reg_imm(ctx->writer, REG_RDI, b_val, "");
+	emit_call_label(ctx->writer, "lispvalue_create_bool", "");
+}
+
 static void codegen_generate_literal(CodeGenContext *ctx, Node *node)
 {
 	assert(node->type == NODE_LITERAL);
 	switch (node->literal.lit_type)
 	{
 	case LIT_INT:
-		EMIT_TEXT(ctx, "mov rdi, %d", node->literal.i_val);
-		EMIT_TEXT(ctx, "call lispvalue_create_int");
+		codegen_generate_literal_int(ctx, node);
 		break;
-
 	case LIT_FLOAT:
-		char *label = g_strdup_printf("L_float_%d", get_next_label());
-		EMIT_DATA(ctx, "%s: dq %f", label, node->literal.f_val);
-
-		EMIT_TEXT(ctx, "movsd xmm0, [%s]", label);
-		EMIT_TEXT(ctx, "call lispvalue_create_float");
-		g_free(label);
+		codegen_generate_literal_float(ctx, node);
 		break;
 	case LIT_BOOL:
-		EMIT_TEXT(ctx, "mov rdi, %d", node->literal.b_val ? 1 : 0);
-		EMIT_TEXT(ctx, "call lispvalue_create_bool");
+		codegen_generate_literal_bool(ctx, node);
 		break;
-
 	default:
 		printf("Codegen Error: Unimplemented literal type %d\n",
 			   node->literal.lit_type);
 		exit(1);
 	}
+}
+
+static inline void codegen_generate_global_function(
+	CodeGenContext *ctx, const char *name, Node *fn_node)
+{
+	assert(fn_node->type == NODE_FUNCTION &&
+		   "Expected function node");
+	const char *label =
+		codegen_env_add_global_variable(ctx->env, name);
+	emit_data_dq_imm(ctx->writer, label, 0, "");
+
+	codegen_generate_function_impl(ctx, fn_node, name);
+	emit_mov_global_reg(ctx->writer, label, REG_RAX, "");
+}
+
+static inline void codegen_generate_global_variable(
+	CodeGenContext *ctx, const char *name, Node *val)
+{
+	codegen_generate_node(ctx, val);
+	const char *label =
+		codegen_env_add_global_variable(ctx->env, name);
+	emit_data_dq_imm(ctx->writer, label, 0, "");
+	emit_mov_global_reg(ctx->writer, label, REG_RAX, "");
 }
 
 static void codegen_generate_def(CodeGenContext *ctx, Node *node)
@@ -213,19 +253,11 @@ static void codegen_generate_def(CodeGenContext *ctx, Node *node)
 
 	if (value_expr->type == NODE_FUNCTION)
 	{
-		const char *label =
-			codegen_env_add_global_variable(ctx->env, name);
-		EMIT_DATA(ctx, "%s: dq 0", label);
-		codegen_generate_function_impl(ctx, value_expr, name);
-		EMIT_TEXT(ctx, "mov [%s], rax", label);
+		codegen_generate_global_function(ctx, name, value_expr);
 	}
 	else
 	{
-		codegen_generate_node(ctx, value_expr);
-		const char *label =
-			codegen_env_add_global_variable(ctx->env, name);
-		EMIT_DATA(ctx, "%s: dq 0", label);
-		EMIT_TEXT(ctx, "mov [%s], rax", label);
+		codegen_generate_global_variable(ctx, name, value_expr);
 	}
 }
 
@@ -234,6 +266,7 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 										   const char *self_name)
 {
 	assert(node->type == NODE_FUNCTION);
+
 	int original_stack_offset =
 		codegen_env_get_stack_offset(ctx->env);
 	int func_label_num = get_next_label();
@@ -241,13 +274,13 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 	char *end_func_label =
 		g_strdup_printf("L_func_end_%d", func_label_num);
 
-	EMIT_TEXT(ctx, "jmp %s", end_func_label);
+	emit_jmp(ctx->writer, end_func_label, "");
 
-	EMIT_TEXT(ctx, "%s: ;%s", func_label,
-			  (self_name) ? self_name : "anonymous");
-	EMIT_TEXT(ctx, "push rbp");
-	EMIT_TEXT(ctx, "mov rbp, rsp");
-	EMIT_TEXT(ctx, "push r10 ; push the closure pointer");
+	char *comment_name = (self_name) ? self_name : "anonymous";
+	emit_label(ctx->writer, func_label, "function %s", comment_name);
+	emit_push_reg(ctx->writer, REG_RBP, "");
+	emit_mov_reg_reg(ctx->writer, REG_RBP, REG_RSP, "");
+	emit_push_reg(ctx->writer, REG_R10, "push the closure pointer");
 
 	codegen_env_enter_scope(ctx->env);
 	codegen_env_reset_stack_offset(ctx->env, -8);
@@ -258,7 +291,7 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 	{
 		if (i < NUM_ARGUMENT_REGISTERS)
 		{
-			EMIT_TEXT(ctx, "push %s", ARGUMENT_REGISTERS[i]);
+			emit_push_reg(ctx->writer, ARGUMENT_REGS[i], "arg %d", i);
 			codegen_env_add_stack_variable(
 				ctx->env, string_array_index(params, i));
 		}
@@ -267,8 +300,8 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 	StringArray *free_vars = node->function.free_var_names;
 	for (guint i = 0; i < free_vars->_array->len; i++)
 	{
-		codegen_env_add_free_variable(
-			ctx->env, string_array_index(free_vars, i), i);
+		char *name = string_array_index(free_vars, i);
+		codegen_env_add_free_variable(ctx->env, name, i);
 	}
 
 	NodeArray *body = node->function.body;
@@ -280,12 +313,12 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 
 	codegen_env_exit_scope(ctx->env);
 
-	EMIT_TEXT(ctx, "pop r10        ; Restore the closure pointer ");
-	EMIT_TEXT(ctx, "mov rsp, rbp");
-	EMIT_TEXT(ctx, "pop rbp");
-	EMIT_TEXT(ctx, "ret");
+	emit_pop_reg(ctx->writer, REG_R10, "Restore the closure pointer");
+	emit_mov_reg_reg(ctx->writer, REG_RSP, REG_RBP, "");
+	emit_pop_reg(ctx->writer, REG_RBP, "");
+	emit_ret(ctx->writer, "");
 
-	EMIT_TEXT(ctx, "%s:", end_func_label);
+	emit_label(ctx->writer, end_func_label, "");
 
 	guint num_free = free_vars->_array->len;
 	for (int i = num_free - 1; i >= 0; i--)
@@ -294,7 +327,9 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 
 		if (self_name && strcmp(free_var_name, self_name) == 0)
 		{
-			EMIT_TEXT(ctx, "push 0 ; Self-reference for recursion");
+			// EMIT_TEXT(ctx, "push 0 ; Self-reference for
+			// recursion");
+			emit_push_imm(ctx->writer, 0, "");
 		}
 		else
 		{
@@ -310,51 +345,99 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 			switch (loc->type)
 			{
 			case VAR_LOCATION_GLOBAL:
-				EMIT_TEXT(ctx, "push qword [%s]", loc->global_label);
+				emit_push_global(
+					ctx->writer, loc->global_label,
+					"push global free var onto the stack");
 				break;
 			case VAR_LOCATION_STACK:
-				EMIT_TEXT(ctx, "mov rdi, [rbp + %d]",
-						  loc->stack_offset);
-				EMIT_TEXT(ctx, "call lispcell_create");
-				EMIT_TEXT(ctx, "mov rdi, rax");
-				EMIT_TEXT(ctx, "call lispvalue_create_cell");
-				EMIT_TEXT(ctx, "push rax");
+				emit_mov_reg_membase(ctx->writer, REG_RDI, REG_RBP,
+									 loc->stack_offset, "");
+				emit_call_label(ctx->writer, "lispcell_create", "");
+				emit_mov_reg_reg(ctx->writer, REG_RDI, REG_RAX,
+								 "load created lispcell as argument");
+				emit_call_label(ctx->writer, "lispvalue_create_cell",
+								"");
+				emit_push_reg(ctx->writer, REG_RAX,
+							  "push stack freevar onto the stack");
 				break;
 			case VAR_LOCATION_ENV:
-				EMIT_TEXT(ctx, "mov rax, [r10 + %d]",
-						  32 + (loc->env_index * 8));
-				EMIT_TEXT(ctx, "push rax");
+				int64_t env_offset =
+					sizeof(LispClosureObject) +
+					loc->env_index * sizeof(LispValue *);
+				emit_mov_reg_membase(
+					ctx->writer, REG_RAX, REG_R10, env_offset,
+					"load free variable from closure at r10, offset "
+					"by LispClosureObject (size=%d) ",
+					sizeof(LispClosureObject));
+				emit_push_reg(ctx->writer, REG_RAX,
+							  "push env free var onto the stack");
 				break;
 			}
 		}
 	}
 
-	EMIT_TEXT(ctx, "mov rdi, %s", func_label);
-	EMIT_TEXT(ctx, "mov rsi, %d", num_params);
-	EMIT_TEXT(ctx, "mov rdx, %d", num_free);
-	const char *variadic_regs[] = {"rcx", "r8", "r9"};
+	emit_mov_reg_label(ctx->writer, ARGUMENT_REGS[0], func_label,
+					   "arg 1 : function pointer");
+	emit_mov_reg_imm(ctx->writer, ARGUMENT_REGS[1], num_params,
+					 "arg 2: num_params");
+	emit_mov_reg_imm(ctx->writer, ARGUMENT_REGS[2], num_free,
+					 "arg 3: num_free");
+
+	const enum Register variadic_regs[] = {REG_RCX, REG_R8, REG_R9};
 	int num_variadic_regs =
 		sizeof(variadic_regs) / sizeof(variadic_regs[0]);
 
 	for (guint i = 0; i < num_free && i < num_variadic_regs; i++)
 	{
-		EMIT_TEXT(ctx, "mov %s, [rsp + %d]", variadic_regs[i], i * 8);
+		emit_mov_reg_membase(ctx->writer, variadic_regs[i], REG_RSP,
+							 i * 8,
+							 "arg %d (%s): load free var from stack",
+							 i + 4, reg_to_string(variadic_regs[i]));
 	}
+	// todo: leave the other arguments on the stack as per C ABI
 
-	EMIT_TEXT(ctx, "xor rax, rax");
+	emit_xor_reg_reg(
+		ctx->writer, REG_RAX, REG_RAX,
+		"ABI: zero RAX for variadic call. Otherwise the C ABI "
+		"interprets RAX as number of XMM registers used in call");
 
-	bool need_align = (num_free % 2) == 1;
-
-	EMIT_TEXT(ctx, "call lispvalue_create_closure");
+	emit_call_label(ctx->writer, "lispvalue_create_closure", "");
 
 	if (num_free > 0)
 	{
-		EMIT_TEXT(ctx, "add rsp, %d", (num_free) * 8);
+		emit_add_rsp(ctx->writer, num_free * 8,
+					 "take free vars off the stack");
 	}
 
 	codegen_env_set_stack_offset(ctx->env, original_stack_offset);
 	g_free(func_label);
 	g_free(end_func_label);
+}
+static inline void codegen_load_global_variable(CodeGenContext *ctx,
+												VarLocation *loc)
+{
+	emit_mov_reg_global(ctx->writer, REG_RAX, loc->global_label,
+						"load global variable");
+}
+
+static inline void codegen_load_stack_variable(CodeGenContext *ctx,
+											   VarLocation *loc)
+{
+	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_RBP,
+						 loc->stack_offset, "load stack variable");
+}
+
+static inline void codegen_load_free_variable(CodeGenContext *ctx,
+											  VarLocation *loc)
+{
+	int64_t free_var_offset = sizeof(LispClosureObject) +
+							  sizeof(LispValue *) * loc->env_index;
+	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_R10,
+						 free_var_offset, "load free (env) cell");
+	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_RAX,
+						 sizeof(LispCell *),
+						 "load lispvalue from cell");
+	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_RAX, 0, "");
 }
 
 static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
@@ -375,19 +458,17 @@ static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
 	switch (loc->type)
 	{
 	case VAR_LOCATION_GLOBAL:
-		EMIT_TEXT(ctx, "mov rax, [%s]", loc->global_label);
+		codegen_load_global_variable(ctx, loc);
 		break;
-
 	case VAR_LOCATION_STACK:
-		EMIT_TEXT(ctx, "mov rax, [rbp + %d]", loc->stack_offset);
+		codegen_load_stack_variable(ctx, loc);
 		break;
 	case VAR_LOCATION_ENV:
-		EMIT_TEXT(ctx, "mov rax, [r10 + %d]",
-				  32 + (loc->env_index * 8));
-		EMIT_TEXT(ctx, "mov rax, [rax + 8]");
-		EMIT_TEXT(ctx, "mov rax, [rax]");
+		codegen_load_free_variable(ctx, loc);
 		break;
-		break;
+	default:
+		printf("Undefined variable type '%d'", loc->type);
+		exit(1);
 	}
 }
 
@@ -402,7 +483,9 @@ static void codegen_generate_let(CodeGenContext *ctx, Node *node)
 	{
 		VarBinding *binding = g_ptr_array_index(bindings->_array, i);
 		codegen_generate_node(ctx, binding->value_expr);
-		EMIT_TEXT(ctx, "push rax");
+		// EMIT_TEXT(ctx, "push rax");
+		emit_push_reg(ctx->writer, REG_RAX, "push stack variable %s",
+					  binding->name);
 		codegen_env_add_stack_variable(ctx->env, binding->name);
 	}
 
@@ -416,7 +499,8 @@ static void codegen_generate_let(CodeGenContext *ctx, Node *node)
 	guint num_bindings = bindings->_array->len;
 	if (num_bindings > 0)
 	{
-		EMIT_TEXT(ctx, "add rsp, %d", num_bindings * 8);
+		emit_add_rsp(ctx->writer, num_bindings * sizeof(LispValue *),
+					 "take let variables off the stack");
 	}
 
 	codegen_env_exit_scope(ctx->env);
@@ -440,7 +524,7 @@ static void codegen_generate_call(CodeGenContext *ctx, Node *node)
 	{
 		Node *arg_node = g_ptr_array_index(args->_array, i);
 		codegen_generate_node(ctx, arg_node);
-		EMIT_TEXT(ctx, "push rax");
+		emit_push_reg(ctx->writer, REG_RAX, "push var %d", i);
 	}
 
 	const char *builtin_c_label = NULL;
@@ -459,15 +543,21 @@ static void codegen_generate_call(CodeGenContext *ctx, Node *node)
 
 		if (is_variadic_op && num_args > 2)
 		{
-			EMIT_TEXT(ctx, "pop rdi");
-			EMIT_TEXT(ctx, "pop rsi");
-			EMIT_TEXT(ctx, "call %s", builtin_c_label);
+			emit_pop_reg(ctx->writer, REG_RDI,
+						 "pop arg 1 off the stack");
+			emit_pop_reg(ctx->writer, REG_RSI,
+						 "pop arg 2 off the stack");
+			emit_call_label(ctx->writer, builtin_c_label, "");
 
 			for (guint i = 2; i < num_args; i++)
 			{
-				EMIT_TEXT(ctx, "mov rdi, rax");
-				EMIT_TEXT(ctx, "pop rsi");
-				EMIT_TEXT(ctx, "call %s", builtin_c_label);
+				emit_comment(ctx->writer,
+							 "builtin variadic function hack");
+				emit_mov_reg_reg(ctx->writer, REG_RDI, REG_RAX,
+								 "load returned value as arg 1");
+				emit_pop_reg(ctx->writer, REG_RSI,
+							 "pop arg 2 off the stack");
+				emit_call_label(ctx->writer, builtin_c_label, "");
 			}
 		}
 		else
@@ -476,10 +566,11 @@ static void codegen_generate_call(CodeGenContext *ctx, Node *node)
 				min(num_args, NUM_ARGUMENT_REGISTERS);
 			for (guint i = 0; i < num_args_in_regs; i++)
 			{
-				EMIT_TEXT(ctx, "pop %s", ARGUMENT_REGISTERS[i]);
+				emit_pop_reg(ctx->writer, ARGUMENT_REGS[i],
+							 "pop arg %d off the stack", i + 1);
 			}
 
-			EMIT_TEXT(ctx, "call %s", builtin_c_label);
+			emit_call_label(ctx->writer, builtin_c_label, "");
 		}
 	}
 	else
@@ -487,24 +578,30 @@ static void codegen_generate_call(CodeGenContext *ctx, Node *node)
 
 		codegen_generate_node(ctx, node->call.fn);
 
-		EMIT_TEXT(ctx, "mov r10, rax ; r10 now holds the LispValue* "
-					   "for the closure");
+		emit_mov_reg_reg(
+			ctx->writer, REG_R10, REG_RAX,
+			"r10 now holds the LispValue* for the closure");
 
 		int num_args_in_regs = min(num_args, NUM_ARGUMENT_REGISTERS);
 		for (guint i = 0; i < num_args_in_regs; i++)
 		{
-			EMIT_TEXT(ctx, "pop %s", ARGUMENT_REGISTERS[i]);
+			emit_pop_reg(ctx->writer, ARGUMENT_REGS[i],
+						 "pop arg %d off the stack", i + 1);
 		}
 
-		EMIT_TEXT(ctx, "mov rax, [r10 + 8] ; Get code_ptr from the "
-					   "closure object");
-		EMIT_TEXT(ctx, "call rax");
+		emit_mov_reg_membase(ctx->writer, REG_RAX, REG_R10,
+							 sizeof(LispValue *),
+							 "Get code pts from the closure object");
+		emit_call_reg(ctx->writer, REG_RAX, "");
 	}
 
 	if (num_args > NUM_ARGUMENT_REGISTERS)
 	{
-		EMIT_TEXT(ctx, "add rsp, %d",
-				  (num_args - NUM_ARGUMENT_REGISTERS) * 8);
+
+		emit_add_rsp(ctx->writer,
+					 (num_args - NUM_ARGUMENT_REGISTERS) *
+						 sizeof(LispValue *),
+					 "Take the remaining arguments off the stack");
 	}
 }
 
@@ -517,15 +614,15 @@ static void codegen_generate_if(CodeGenContext *ctx, Node *node)
 
 	codegen_generate_node(ctx, node->if_expr.condition);
 
-	EMIT_TEXT(ctx, "mov rdi, rax");
-	EMIT_TEXT(ctx, "call lisp_is_truthy");
-	EMIT_TEXT(ctx, "cmp rax, 0");
+	emit_mov_reg_reg(ctx->writer, REG_RDI, REG_RAX, "load arg 1");
+	emit_call_label(ctx->writer, "lisp_is_truthy", "");
+	emit_cmp_reg_imm(ctx->writer, REG_RAX, 0, "");
 
-	EMIT_TEXT(ctx, "je %s", else_label);
+	emit_je(ctx->writer, else_label, "");
 	codegen_generate_node(ctx, node->if_expr.then_branch);
-	EMIT_TEXT(ctx, "jmp %s", end_label);
+	emit_jmp(ctx->writer, end_label, "");
 
-	EMIT_TEXT(ctx, "%s:", else_label);
+	emit_label(ctx->writer, else_label, "");
 
 	if (node->if_expr.else_branch)
 	{
@@ -533,10 +630,10 @@ static void codegen_generate_if(CodeGenContext *ctx, Node *node)
 	}
 	else
 	{
-		EMIT_TEXT(ctx, "xor rax, rax");
+		emit_xor_reg_reg(ctx->writer, REG_RAX, REG_RAX, "");
 	}
 
-	EMIT_TEXT(ctx, "%s:", end_label);
+	emit_label(ctx->writer, end_label, "");
 	free(else_label);
 	free(end_label);
 }

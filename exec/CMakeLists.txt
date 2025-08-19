@@ -8,6 +8,7 @@ add_library(${NAME} STATIC)
 
 target_link_libraries(${NAME} PUBLIC
     ${GLIB_LIBRARIES}
+    runtime
 )
 
 target_include_directories(${NAME} PUBLIC

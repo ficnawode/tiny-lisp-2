@@ -75,6 +75,13 @@ void emit_mov_reg_global(AsmFileWriter *writer,
 						 const char *comment_fmt,
 						 ...);
 
+// mov rax, L_my_global
+void emit_mov_reg_label(AsmFileWriter *writer,
+						enum Register dest,
+						const char *label,
+						const char *comment_fmt,
+						...);
+
 // mov [L_my_global], rax
 void emit_mov_global_reg(AsmFileWriter *writer,
 						 const char *label,
@@ -97,6 +104,21 @@ void emit_mov_membase_reg(AsmFileWriter *writer,
 						  enum Register src,
 						  const char *comment_fmt,
 						  ...);
+
+// movsd xmm0, [my_float_label]
+void emit_movsd_reg_global(AsmFileWriter *writer,
+						   enum Register dest,
+						   const char *label,
+						   const char *comment_fmt,
+						   ...);
+
+// movsd [rbp - 8], xmm0
+void emit_movsd_membase_reg(AsmFileWriter *writer,
+							enum Register base,
+							int offset,
+							enum Register src,
+							const char *comment_fmt,
+							...);
 
 // call rax
 void emit_call_reg(AsmFileWriter *writer,

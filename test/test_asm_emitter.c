@@ -183,6 +183,10 @@ static void test_emit_mov_ops(TestEmitterFixture *fixture,
 	assert_text_emitted(fixture, "mov r10, [my_global]");
 	assert_data_emitted(fixture, "");
 
+	emit_mov_reg_label(fixture->writer, REG_R10, "my_label", NULL);
+	assert_text_emitted(fixture, "mov r10, my_label");
+	assert_data_emitted(fixture, "");
+
 	emit_mov_global_reg(fixture->writer, "my_global_result", REG_RAX,
 						NULL);
 	assert_text_emitted(fixture, "mov [my_global_result], rax");
@@ -198,6 +202,32 @@ static void test_emit_mov_ops(TestEmitterFixture *fixture,
 						 "store arg 1 on stack");
 	assert_text_emitted(fixture,
 						"mov [rbp + 8], rdi ; store arg 1 on stack");
+	assert_data_emitted(fixture, "");
+}
+
+static void test_emit_float_ops(TestEmitterFixture *fixture,
+								gconstpointer user_data)
+{
+	emit_movsd_reg_global(fixture->writer, REG_XMM0, "L_my_float",
+						  NULL);
+	assert_text_emitted(fixture, "movsd xmm0, [L_my_float]");
+	assert_data_emitted(fixture, "");
+
+	emit_movsd_reg_global(fixture->writer, REG_XMM0, "L_pi_const",
+						  "load float const '%s'", "pi");
+	assert_text_emitted(
+		fixture, "movsd xmm0, [L_pi_const] ; load float const 'pi'");
+	assert_data_emitted(fixture, "");
+
+	emit_movsd_membase_reg(fixture->writer, REG_RBP, -16, REG_XMM0,
+						   NULL);
+	assert_text_emitted(fixture, "movsd [rbp + -16], xmm0");
+	assert_data_emitted(fixture, "");
+
+	emit_movsd_membase_reg(fixture->writer, REG_RSP, 0, REG_XMM0,
+						   "store float result");
+	assert_text_emitted(fixture,
+						"movsd [rsp + 0], xmm0 ; store float result");
 	assert_data_emitted(fixture, "");
 }
 

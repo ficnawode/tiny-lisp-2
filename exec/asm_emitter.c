@@ -149,6 +149,17 @@ void emit_mov_reg_global(AsmFileWriter *writer,
 	IMPLEMENT_TEXT_EMITTER(writer, comment_fmt, "mov %s, [%s]",
 						   reg_to_string(dest), label);
 }
+
+void emit_mov_reg_label(AsmFileWriter *writer,
+						enum Register dest,
+						const char *label,
+						const char *comment_fmt,
+						...)
+{
+	IMPLEMENT_TEXT_EMITTER(writer, comment_fmt, "mov %s, %s",
+						   reg_to_string(dest), label);
+}
+
 void emit_mov_global_reg(AsmFileWriter *writer,
 						 const char *label,
 						 enum Register src,
@@ -179,6 +190,32 @@ void emit_mov_membase_reg(AsmFileWriter *writer,
 						  ...)
 {
 	IMPLEMENT_TEXT_EMITTER(writer, comment_fmt, "mov [%s + %d], %s",
+						   reg_to_string(base), offset,
+						   reg_to_string(src));
+}
+void emit_movsd_reg_global(AsmFileWriter *writer,
+						   enum Register dest,
+						   const char *label,
+						   const char *comment_fmt,
+						   ...)
+{
+	// You could add an assert here to ensure dest is an XMM register
+	assert(dest >= REG_XMM0 &&
+		   "Destination for movsd must be an XMM register");
+	IMPLEMENT_TEXT_EMITTER(writer, comment_fmt, "movsd %s, [%s]",
+						   reg_to_string(dest), label);
+}
+
+void emit_movsd_membase_reg(AsmFileWriter *writer,
+							enum Register base,
+							int offset,
+							enum Register src,
+							const char *comment_fmt,
+							...)
+{
+	assert(src >= REG_XMM0 &&
+		   "Source for movsd must be an XMM register");
+	IMPLEMENT_TEXT_EMITTER(writer, comment_fmt, "movsd [%s + %d], %s",
 						   reg_to_string(base), offset,
 						   reg_to_string(src));
 }
