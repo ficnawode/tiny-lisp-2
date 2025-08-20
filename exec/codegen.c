@@ -8,19 +8,17 @@
 static CodeGenContext *
 codegen_context_create(const char *output_prefix);
 static void codegen_context_cleanup(CodeGenContext *ctx);
-static void codegen_generate_node(CodeGenContext *ctx, Node *node);
-static void codegen_generate_literal(CodeGenContext *ctx, Node *node);
-static void codegen_generate_def(CodeGenContext *ctx, Node *node);
-static void codegen_generate_variable(CodeGenContext *ctx,
-									  Node *node);
-static void codegen_generate_if(CodeGenContext *ctx, Node *node);
-static void codegen_generate_let(CodeGenContext *ctx, Node *node);
-static void codegen_generate_call(CodeGenContext *ctx, Node *node);
-static void codegen_generate_function_impl(CodeGenContext *ctx,
-										   Node *node,
-										   const char *self_name);
-static void codegen_generate_function(CodeGenContext *ctx,
-									  Node *node);
+static void generate_node(CodeGenContext *ctx, Node *node);
+static void generate_literal(CodeGenContext *ctx, Node *node);
+static void generate_def(CodeGenContext *ctx, Node *node);
+static void generate_variable(CodeGenContext *ctx, Node *node);
+static void generate_if(CodeGenContext *ctx, Node *node);
+static void generate_let(CodeGenContext *ctx, Node *node);
+static void generate_call(CodeGenContext *ctx, Node *node);
+static void generate_function_impl(CodeGenContext *ctx,
+								   Node *node,
+								   const char *self_name);
+static void generate_function(CodeGenContext *ctx, Node *node);
 
 static const enum Register ARGUMENT_REGS[] = {
 	REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
@@ -132,7 +130,7 @@ void codegen_compile_program(NodeArray *ast,
 	{
 		codegen_env_reset_stack_offset(ctx->env, 0);
 		Node *node = g_ptr_array_index(ast->_array, i);
-		codegen_generate_node(ctx, node);
+		generate_node(ctx, node);
 	}
 	write_epilogue(ctx);
 
@@ -142,30 +140,30 @@ void codegen_compile_program(NodeArray *ast,
 	return;
 }
 
-static void codegen_generate_node(CodeGenContext *ctx, Node *node)
+static void generate_node(CodeGenContext *ctx, Node *node)
 {
 	switch (node->type)
 	{
 	case NODE_LITERAL:
-		codegen_generate_literal(ctx, node);
+		generate_literal(ctx, node);
 		break;
 	case NODE_DEF:
-		codegen_generate_def(ctx, node);
+		generate_def(ctx, node);
 		break;
 	case NODE_VARIABLE:
-		codegen_generate_variable(ctx, node);
+		generate_variable(ctx, node);
 		break;
 	case NODE_IF:
-		codegen_generate_if(ctx, node);
+		generate_if(ctx, node);
 		break;
 	case NODE_LET:
-		codegen_generate_let(ctx, node);
+		generate_let(ctx, node);
 		break;
 	case NODE_CALL:
-		codegen_generate_call(ctx, node);
+		generate_call(ctx, node);
 		break;
 	case NODE_FUNCTION:
-		codegen_generate_function(ctx, node);
+		generate_function(ctx, node);
 		break;
 	default:
 		fprintf(stderr,
@@ -175,15 +173,15 @@ static void codegen_generate_node(CodeGenContext *ctx, Node *node)
 	}
 }
 
-static inline void codegen_generate_literal_int(CodeGenContext *ctx,
-												Node *node)
+static inline void generate_literal_int(CodeGenContext *ctx,
+										Node *node)
 {
 	emit_mov_reg_imm(ctx->writer, REG_RDI, node->literal.i_val,
 					 "int literal");
 	emit_call_label(ctx->writer, "lispvalue_create_int", "");
 }
-static inline void codegen_generate_literal_float(CodeGenContext *ctx,
-												  Node *node)
+static inline void generate_literal_float(CodeGenContext *ctx,
+										  Node *node)
 {
 	char *label = g_strdup_printf("L_float_%d", get_next_label());
 	double f_val = node->literal.f_val;
@@ -192,27 +190,27 @@ static inline void codegen_generate_literal_float(CodeGenContext *ctx,
 	emit_call_label(ctx->writer, "lispvalue_create_float", "");
 	g_free(label);
 }
-static inline void codegen_generate_literal_bool(CodeGenContext *ctx,
-												 Node *node)
+static inline void generate_literal_bool(CodeGenContext *ctx,
+										 Node *node)
 {
 	int64_t b_val = node->literal.b_val ? 1 : 0;
 	emit_mov_reg_imm(ctx->writer, REG_RDI, b_val, "");
 	emit_call_label(ctx->writer, "lispvalue_create_bool", "");
 }
 
-static void codegen_generate_literal(CodeGenContext *ctx, Node *node)
+static void generate_literal(CodeGenContext *ctx, Node *node)
 {
 	assert(node->type == NODE_LITERAL);
 	switch (node->literal.lit_type)
 	{
 	case LIT_INT:
-		codegen_generate_literal_int(ctx, node);
+		generate_literal_int(ctx, node);
 		break;
 	case LIT_FLOAT:
-		codegen_generate_literal_float(ctx, node);
+		generate_literal_float(ctx, node);
 		break;
 	case LIT_BOOL:
-		codegen_generate_literal_bool(ctx, node);
+		generate_literal_bool(ctx, node);
 		break;
 	default:
 		printf("Codegen Error: Unimplemented literal type %d\n",
@@ -221,8 +219,9 @@ static void codegen_generate_literal(CodeGenContext *ctx, Node *node)
 	}
 }
 
-static inline void codegen_generate_global_function(
-	CodeGenContext *ctx, const char *name, Node *fn_node)
+static inline void generate_global_function(CodeGenContext *ctx,
+											const char *name,
+											Node *fn_node)
 {
 	assert(fn_node->type == NODE_FUNCTION &&
 		   "Expected function node");
@@ -230,21 +229,22 @@ static inline void codegen_generate_global_function(
 		codegen_env_add_global_variable(ctx->env, name);
 	emit_data_dq_imm(ctx->writer, label, 0, "");
 
-	codegen_generate_function_impl(ctx, fn_node, name);
+	generate_function_impl(ctx, fn_node, name);
 	emit_mov_global_reg(ctx->writer, label, REG_RAX, "");
 }
 
-static inline void codegen_generate_global_variable(
-	CodeGenContext *ctx, const char *name, Node *val)
+static inline void generate_global_variable(CodeGenContext *ctx,
+											const char *name,
+											Node *val)
 {
-	codegen_generate_node(ctx, val);
+	generate_node(ctx, val);
 	const char *label =
 		codegen_env_add_global_variable(ctx->env, name);
 	emit_data_dq_imm(ctx->writer, label, 0, "");
 	emit_mov_global_reg(ctx->writer, label, REG_RAX, "");
 }
 
-static void codegen_generate_def(CodeGenContext *ctx, Node *node)
+static void generate_def(CodeGenContext *ctx, Node *node)
 {
 	assert(node->type == NODE_DEF);
 	VarBinding *binding = node->def.binding;
@@ -253,18 +253,18 @@ static void codegen_generate_def(CodeGenContext *ctx, Node *node)
 
 	if (value_expr->type == NODE_FUNCTION)
 	{
-		codegen_generate_global_function(ctx, name, value_expr);
+		generate_global_function(ctx, name, value_expr);
 	}
 	else
 	{
-		codegen_generate_global_variable(ctx, name, value_expr);
+		generate_global_variable(ctx, name, value_expr);
 	}
 }
 
-static void codegen_generate_function_body(CodeGenContext *ctx,
-										   Node *node,
-										   const char *func_label,
-										   const char *self_name)
+static void generate_function_body(CodeGenContext *ctx,
+								   Node *node,
+								   const char *func_label,
+								   const char *self_name)
 
 {
 	const char *comment_name = (self_name) ? self_name : "anonymous";
@@ -316,8 +316,7 @@ static void codegen_generate_function_body(CodeGenContext *ctx,
 	NodeArray *body = node->function.body;
 	for (guint i = 0; i < body->_array->len; i++)
 	{
-		codegen_generate_node(ctx,
-							  g_ptr_array_index(body->_array, i));
+		generate_node(ctx, g_ptr_array_index(body->_array, i));
 	}
 
 	codegen_env_exit_scope(ctx->env);
@@ -328,10 +327,10 @@ static void codegen_generate_function_body(CodeGenContext *ctx,
 	emit_ret(ctx->writer, "");
 }
 
-static void codegen_generate_closure_creation(CodeGenContext *ctx,
-											  Node *node,
-											  const char *func_label,
-											  const char *self_name)
+static void generate_closure_creation(CodeGenContext *ctx,
+									  Node *node,
+									  const char *func_label,
+									  const char *self_name)
 {
 	StringArray *free_vars = node->function.free_var_names;
 	guint num_free = free_vars->_array->len;
@@ -436,9 +435,9 @@ static void codegen_generate_closure_creation(CodeGenContext *ctx,
 	}
 }
 
-static void codegen_generate_function_impl(CodeGenContext *ctx,
-										   Node *node,
-										   const char *self_name)
+static void generate_function_impl(CodeGenContext *ctx,
+								   Node *node,
+								   const char *self_name)
 {
 	assert(node->type == NODE_FUNCTION);
 
@@ -450,11 +449,10 @@ static void codegen_generate_function_impl(CodeGenContext *ctx,
 		g_strdup_printf("L_func_end_%d", func_label_num);
 
 	emit_jmp(ctx->writer, end_func_label, "");
-	codegen_generate_function_body(ctx, node, func_label, self_name);
+	generate_function_body(ctx, node, func_label, self_name);
 
 	emit_label(ctx->writer, end_func_label, "");
-	codegen_generate_closure_creation(ctx, node, func_label,
-									  self_name);
+	generate_closure_creation(ctx, node, func_label, self_name);
 
 	codegen_env_set_stack_offset(ctx->env, original_stack_offset);
 	g_free(func_label);
@@ -490,7 +488,7 @@ static inline void codegen_load_free_variable(CodeGenContext *ctx,
 	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_RAX, 0, "");
 }
 
-static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
+static void generate_variable(CodeGenContext *ctx, Node *node)
 {
 	assert(node->type == NODE_VARIABLE);
 
@@ -522,7 +520,7 @@ static void codegen_generate_variable(CodeGenContext *ctx, Node *node)
 	}
 }
 
-static void codegen_generate_let(CodeGenContext *ctx, Node *node)
+static void generate_let(CodeGenContext *ctx, Node *node)
 {
 	assert(node->type == NODE_LET);
 
@@ -532,7 +530,7 @@ static void codegen_generate_let(CodeGenContext *ctx, Node *node)
 	for (guint i = 0; i < bindings->_array->len; i++)
 	{
 		VarBinding *binding = g_ptr_array_index(bindings->_array, i);
-		codegen_generate_node(ctx, binding->value_expr);
+		generate_node(ctx, binding->value_expr);
 		emit_push_reg(ctx->writer, REG_RAX, "push stack variable %s",
 					  binding->name);
 		codegen_env_add_stack_variable(ctx->env, binding->name);
@@ -542,7 +540,7 @@ static void codegen_generate_let(CodeGenContext *ctx, Node *node)
 	for (guint i = 0; i < body->_array->len; i++)
 	{
 		Node *body_expr = g_ptr_array_index(body->_array, i);
-		codegen_generate_node(ctx, body_expr);
+		generate_node(ctx, body_expr);
 	}
 
 	guint num_bindings = bindings->_array->len;
@@ -557,9 +555,9 @@ static void codegen_generate_let(CodeGenContext *ctx, Node *node)
 	codegen_env_exit_scope(ctx->env);
 }
 
-static void codegen_generate_function(CodeGenContext *ctx, Node *node)
+static void generate_function(CodeGenContext *ctx, Node *node)
 {
-	codegen_generate_function_impl(ctx, node, NULL);
+	generate_function_impl(ctx, node, NULL);
 }
 
 static inline int min(int a, int b) { return (a < b) ? a : b; }
@@ -571,7 +569,7 @@ static void codegen_push_arguments(CodeGenContext *ctx,
 	for (int i = num_args - 1; i >= 0; i--)
 	{
 		Node *arg_node = g_ptr_array_index(args->_array, i);
-		codegen_generate_node(ctx, arg_node);
+		generate_node(ctx, arg_node);
 		emit_push_reg(ctx->writer, REG_RAX, "push arg %d", i);
 		codegen_env_add_stack_space(ctx->env, 8);
 	}
@@ -592,7 +590,7 @@ static void codegen_cleanup_stack_args(CodeGenContext *ctx,
 	}
 }
 
-static void codegen_generate_standard_builtin_call(
+static void generate_standard_builtin_call(
 	CodeGenContext *ctx, Node *call_node, const char *builtin_c_label)
 {
 	NodeArray *args = call_node->call.args;
@@ -613,7 +611,7 @@ static void codegen_generate_standard_builtin_call(
 	codegen_cleanup_stack_args(ctx, num_args);
 }
 
-static void codegen_generate_variadic_builtin_call(
+static void generate_variadic_builtin_call(
 	CodeGenContext *ctx, Node *call_node, const char *builtin_c_label)
 {
 	NodeArray *args = call_node->call.args;
@@ -641,15 +639,15 @@ static void codegen_generate_variadic_builtin_call(
 	}
 }
 
-static void codegen_generate_lisp_closure_call(CodeGenContext *ctx,
-											   Node *call_node)
+static void generate_lisp_closure_call(CodeGenContext *ctx,
+									   Node *call_node)
 {
 	NodeArray *args = call_node->call.args;
 	int num_args = args->_array->len;
 
 	codegen_push_arguments(ctx, args);
 
-	codegen_generate_node(ctx, call_node->call.fn);
+	generate_node(ctx, call_node->call.fn);
 
 	emit_mov_reg_reg(ctx->writer, REG_R12, REG_RAX,
 					 "save closure pointer in R12");
@@ -670,8 +668,9 @@ static void codegen_generate_lisp_closure_call(CodeGenContext *ctx,
 	codegen_cleanup_stack_args(ctx, num_args);
 }
 
-static void codegen_generate_builtin_func_call(
-	CodeGenContext *ctx, Node *call_node, const char *builtin_c_label)
+static void generate_builtin_func_call(CodeGenContext *ctx,
+									   Node *call_node,
+									   const char *builtin_c_label)
 {
 	const char *op_name = call_node->call.fn->variable.name;
 	const int num_args = call_node->call.args->_array->len;
@@ -681,17 +680,17 @@ static void codegen_generate_builtin_func_call(
 
 	if (is_variadic_op && num_args > 2)
 	{
-		codegen_generate_variadic_builtin_call(ctx, call_node,
-											   builtin_c_label);
+		generate_variadic_builtin_call(ctx, call_node,
+									   builtin_c_label);
 	}
 	else
 	{
-		codegen_generate_standard_builtin_call(ctx, call_node,
-											   builtin_c_label);
+		generate_standard_builtin_call(ctx, call_node,
+									   builtin_c_label);
 	}
 }
 
-static void codegen_generate_call(CodeGenContext *ctx, Node *node)
+static void generate_call(CodeGenContext *ctx, Node *node)
 {
 	assert(node->type == NODE_CALL);
 
@@ -704,16 +703,15 @@ static void codegen_generate_call(CodeGenContext *ctx, Node *node)
 
 	if (builtin_c_label)
 	{
-		codegen_generate_builtin_func_call(ctx, node,
-										   builtin_c_label);
+		generate_builtin_func_call(ctx, node, builtin_c_label);
 	}
 	else
 	{
-		codegen_generate_lisp_closure_call(ctx, node);
+		generate_lisp_closure_call(ctx, node);
 	}
 }
 
-static void codegen_generate_if(CodeGenContext *ctx, Node *node)
+static void generate_if(CodeGenContext *ctx, Node *node)
 {
 	assert(node->type == NODE_IF);
 
@@ -721,19 +719,19 @@ static void codegen_generate_if(CodeGenContext *ctx, Node *node)
 	char *else_label = g_strdup_printf("L_else_%d", label_num);
 	char *end_label = g_strdup_printf("L_end_if_%d", label_num);
 
-	codegen_generate_node(ctx, node->if_expr.condition);
+	generate_node(ctx, node->if_expr.condition);
 	emit_mov_reg_reg(ctx->writer, REG_RDI, REG_RAX, "load arg 1");
 	emit_call_label(ctx->writer, "lisp_is_truthy", "");
 	emit_cmp_reg_imm(ctx->writer, REG_RAX, 0, "");
 	emit_je(ctx->writer, else_label, "");
 
-	codegen_generate_node(ctx, node->if_expr.then_branch);
+	generate_node(ctx, node->if_expr.then_branch);
 	emit_jmp(ctx->writer, end_label, "");
 
 	emit_label(ctx->writer, else_label, "");
 	if (node->if_expr.else_branch)
 	{
-		codegen_generate_node(ctx, node->if_expr.else_branch);
+		generate_node(ctx, node->if_expr.else_branch);
 	}
 	else
 	{
