@@ -68,6 +68,29 @@
   (def multi-capture (lambda (n) (+ n prefix suffix)))
   (print-debug (multi-capture 100)))
 
+
+;; Test 8
+;; Function with many arguments (more than registers)
+;; This tests the standard C function call ABI where arguments beyond
+;; the 6th are passed on the stack.
+;; Expected output: 55
+(def (sum-many a b c d e f g h i j) 
+  (+ a  b c  d e f  g  h  i j))
+(print-debug (sum-many 1 2 3 4 5 6 7 8 9 10))
+
+
+;; Test 9 
+;; Closure with many free variables (more than registers)
+;; This tests the creation of a closure where the number of captured
+;; free variables exceeds the number of registers available for the
+;; variadic part of the 'lispvalue_create_closure' C function call.
+;; The remaining free variables must be passed correctly on the stack.
+;; Expected output: 136
+(let ((v1 1) (v2 2) (v3 3) (v4 4) (v5 5) (v6 6) (v7 7) (v8 8))
+  (def mega-closure (lambda (x) 
+    (+ x (+ v1 (+ v2 (+ v3 (+ v4 (+ v5 (+ v6 (+ v7 v8))))))))))
+  (print-debug (mega-closure 100)))
+
 ;; Test 8 
 ;; Mutual Recursion (via shared environment)
 ;; is-even and is-odd call each other. This is tricky. It will require a 2 pass parser.

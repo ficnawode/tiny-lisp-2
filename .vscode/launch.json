@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "C/C++: gdb build/test/lisp/test_closures/test_closures",
+            "name": "test_closures",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/test/lisp/test_closures/test_closures_exe",
@@ -24,6 +24,30 @@
                     "ignoreFailures": true
                 }
             ],
+        },
+        {
+            "name": "test_troublesome_closure",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/test/lisp/test_troublesome_closure/test_troublesome_closure_exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/test/lisp/test_troublesome_closure/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ],
         }
-    ]
+    ],
 }

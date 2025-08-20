@@ -19,15 +19,6 @@ typedef enum
 	LISP_CELL
 } LispValueType;
 
-typedef struct
-{
-	LispValueType type; // must be LISP_CLOSURE
-	void (*code_ptr)(void);
-	long arity;
-	long num_free_vars;
-	LispValue *free_vars[];
-} LispClosureObject;
-
 typedef struct LispCell
 {
 	LispValue *value;
@@ -53,3 +44,12 @@ struct LispValue
 		LispCell *cell;
 	} as;
 };
+
+typedef struct
+{
+	LispValueType type; // must be LISP_CLOSURE
+	void (*code_ptr)(void);
+	long arity;
+	long num_free_vars;
+	LispValue *free_vars[];
+} LispClosureObject;

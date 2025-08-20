@@ -85,6 +85,8 @@ Node *node_create_function(StringArray *params,
 	assert(n && "Out of memory");
 	n->type = NODE_FUNCTION;
 	n->function.free_var_names = free_vars;
+	g_ptr_array_sort(n->function.free_var_names->_array,
+					 (GCompareFunc)g_strcmp0);
 	n->function.closure_env = closure_env;
 	n->function.body = body;
 	n->function.param_names = params;
