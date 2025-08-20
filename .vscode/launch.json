@@ -26,39 +26,15 @@
             ],
         },
         {
-            "name": "test_troublesome_closure",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/test/lisp/test_troublesome_closure/test_troublesome_closure_exe",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build/test/lisp/test_troublesome_closure/",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                },
-                {
-                    "description": "Set Disassembly Flavor to Intel",
-                    "text": "-gdb-set disassembly-flavor intel",
-                    "ignoreFailures": true
-                }
-            ],
-        },
-        {
-            "name": "build test_troublesome_closure",
+            "name": "build test_closures",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/exec/exec_main",
             "args": [
-                "${workspaceFolder}/test/lisp/test_troublesome_closure.lisp",
+                "${workspaceFolder}/test/lisp/test_closures.lisp",
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build/test/lisp/test_troublesome_closure/",
+            "cwd": "${workspaceFolder}/build/test/lisp/test_closures/",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",

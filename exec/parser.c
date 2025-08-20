@@ -14,6 +14,86 @@ static Node *parse_quote(ParserContext *ctx, ParserEnv *env);
 static void synchronize(ParserContext *ctx);
 static void skip_whitespace_and_comments(struct ParserContext *ctx);
 
+static Token pre_scan_next_token(LexerContext *lexer)
+{
+	Token token;
+	do
+	{
+		token = lexer_next(lexer);
+	} while (token.type == TOKEN_WHITESPACE ||
+			 token.type == TOKEN_COMMENT);
+	return token;
+}
+
+static void pre_scan_for_function_definitions(ParserContext *ctx)
+{
+	LexerContext *pre_lexer = lexer_create(ctx->lexer->buffer.data);
+	Token token;
+
+	while (true)
+	{
+		token = pre_scan_next_token(pre_lexer);
+
+		if (token.type == TOKEN_EOF)
+		{
+			token_cleanup(&token);
+			break;
+		}
+
+		if (token.type != TOKEN_LPAREN)
+		{
+			token_cleanup(&token);
+			continue;
+		}
+		token_cleanup(&token);
+
+		token = pre_scan_next_token(pre_lexer);
+		if (token.type != TOKEN_SYMBOL ||
+			strcmp(token.lexeme, "def") != 0)
+		{
+			token_cleanup(&token);
+			continue;
+		}
+		token_cleanup(&token);
+
+		token = pre_scan_next_token(pre_lexer);
+		if (token.type != TOKEN_LPAREN)
+		{
+			token_cleanup(&token);
+			continue;
+		}
+		token_cleanup(&token);
+
+		token = pre_scan_next_token(pre_lexer);
+		if (token.type != TOKEN_SYMBOL)
+		{
+			token_cleanup(&token);
+			continue;
+		}
+
+		parser_env_emplace(ctx->global_env, token.lexeme,
+						   get_placeholder());
+		token_cleanup(&token);
+
+		int paren_depth = 2;
+		while (paren_depth > 0 && token.type != TOKEN_EOF)
+		{
+			token = lexer_next(pre_lexer);
+			if (token.type == TOKEN_LPAREN)
+			{
+				paren_depth++;
+			}
+			if (token.type == TOKEN_RPAREN)
+			{
+				paren_depth--;
+			}
+			token_cleanup(&token);
+		}
+	}
+
+	lexer_cleanup(pre_lexer);
+}
+
 typedef Node *(*SpecialFormParser)(ParserContext *ctx,
 								   ParserEnv *env);
 
@@ -727,6 +807,7 @@ void parser_cleanup(ParserContext *ctx)
 
 NodeArray *parser_parse(ParserContext *ctx)
 {
+	pre_scan_for_function_definitions(ctx);
 	NodeArray *node_array = node_array_new();
 	while (ctx->current_token.type != TOKEN_EOF)
 	{

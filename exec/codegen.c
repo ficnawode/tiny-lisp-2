@@ -117,12 +117,103 @@ static inline void write_epilogue(CodeGenContext *ctx)
 	emit_syscall(ctx->writer, "");
 }
 
+static void codegen_declare_globals_recursive(CodeGenContext *ctx,
+											  Node *node);
+
+static void codegen_declare_globals(CodeGenContext *ctx,
+									NodeArray *ast)
+{
+	emit_comment(ctx->writer, "Global variable declarations");
+	for (guint i = 0; i < ast->_array->len; i++)
+	{
+		Node *node = g_ptr_array_index(ast->_array, i);
+		codegen_declare_globals_recursive(ctx, node);
+	}
+	emit_comment(ctx->writer, "End of global declarations\n");
+}
+
+static void codegen_declare_globals_recursive(CodeGenContext *ctx,
+											  Node *node)
+{
+	if (!node)
+		return;
+
+	switch (node->type)
+	{
+	case NODE_DEF:
+	{
+		const char *name = node->def.binding->name;
+		if (codegen_env_lookup(ctx->env, name) == NULL)
+		{
+			const char *label =
+				codegen_env_add_global_variable(ctx->env, name);
+			emit_data_dq_imm(ctx->writer, label, 0, "global var '%s'",
+							 name);
+		}
+		codegen_declare_globals_recursive(
+			ctx, node->def.binding->value_expr);
+		break;
+	}
+
+	case NODE_LET:
+		for (guint i = 0; i < node->let.bindings->_array->len; i++)
+		{
+			VarBinding *binding =
+				g_ptr_array_index(node->let.bindings->_array, i);
+			codegen_declare_globals_recursive(ctx,
+											  binding->value_expr);
+		}
+		for (guint i = 0; i < node->let.body->_array->len; i++)
+		{
+			Node *body_expr =
+				g_ptr_array_index(node->let.body->_array, i);
+			codegen_declare_globals_recursive(ctx, body_expr);
+		}
+		break;
+
+	case NODE_FUNCTION:
+		for (guint i = 0; i < node->function.body->_array->len; i++)
+		{
+			Node *body_expr =
+				g_ptr_array_index(node->function.body->_array, i);
+			codegen_declare_globals_recursive(ctx, body_expr);
+		}
+		break;
+
+	case NODE_CALL:
+		codegen_declare_globals_recursive(ctx, node->call.fn);
+		for (guint i = 0; i < node->call.args->_array->len; i++)
+		{
+			Node *arg_expr =
+				g_ptr_array_index(node->call.args->_array, i);
+			codegen_declare_globals_recursive(ctx, arg_expr);
+		}
+		break;
+
+	case NODE_IF:
+		codegen_declare_globals_recursive(ctx,
+										  node->if_expr.condition);
+		codegen_declare_globals_recursive(ctx,
+										  node->if_expr.then_branch);
+		codegen_declare_globals_recursive(ctx,
+										  node->if_expr.else_branch);
+		break;
+
+	case NODE_LITERAL:
+	case NODE_VARIABLE:
+	case NODE_QUOTE:
+	case NODE_PLACEHOLDER:
+		break;
+	}
+}
+
 void codegen_compile_program(NodeArray *ast,
 							 const char *output_prefix)
 {
 	CodeGenContext *ctx = codegen_context_create(output_prefix);
 	if (!ctx)
 		return;
+	codegen_declare_globals(ctx, ast);
 
 	write_prologue(ctx);
 
@@ -225,23 +316,34 @@ static inline void generate_global_function(CodeGenContext *ctx,
 {
 	assert(fn_node->type == NODE_FUNCTION &&
 		   "Expected function node");
-	const char *label =
-		codegen_env_add_global_variable(ctx->env, name);
-	emit_data_dq_imm(ctx->writer, label, 0, "");
+	const VarLocation *loc = codegen_env_lookup(ctx->env, name);
+
+	if (loc == NULL || loc->type != VAR_LOCATION_GLOBAL)
+	{
+		printf("Expecting a global label for function '%s'\n", name);
+		exit(1);
+	}
 
 	generate_function_impl(ctx, fn_node, name);
-	emit_mov_global_reg(ctx->writer, label, REG_RAX, "");
+	emit_mov_global_reg(ctx->writer, loc->global_label, REG_RAX, "");
 }
 
 static inline void generate_global_variable(CodeGenContext *ctx,
 											const char *name,
 											Node *val)
 {
+	const VarLocation *loc = codegen_env_lookup(ctx->env, name);
+
+	if (loc == NULL || loc->type != VAR_LOCATION_GLOBAL)
+	{
+		printf("Expecting a global label for variable '%s'\n", name);
+		exit(1);
+	}
+	// const char *label =
+	// 	codegen_env_add_global_variable(ctx->env, name);
+	// emit_data_dq_imm(ctx->writer, label, 0, "");
 	generate_node(ctx, val);
-	const char *label =
-		codegen_env_add_global_variable(ctx->env, name);
-	emit_data_dq_imm(ctx->writer, label, 0, "");
-	emit_mov_global_reg(ctx->writer, label, REG_RAX, "");
+	emit_mov_global_reg(ctx->writer, loc->global_label, REG_RAX, "");
 }
 
 static void generate_def(CodeGenContext *ctx, Node *node)

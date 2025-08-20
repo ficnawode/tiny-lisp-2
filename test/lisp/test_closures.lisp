@@ -108,15 +108,15 @@
 ;; global scope, so is-odd can capture it as a free variable.
 ;; Expected output: 1 (#t)
 ;; Expected output: 0 (#f)
-;; (def (is-even n)
-;;   (if (= n 0)
-;;       #t
-;;       (is-odd (- n 1))))
+(def (is-even n)
+  (if (= n 0)
+      #t
+      (is-odd (- n 1))))
 
-;; (def (is-odd n)
-;;   (if (= n 0)
-;;       #f
-;;       (is-even (- n 1))))
+(def (is-odd n)
+  (if (= n 0)
+      #f
+      (is-even (- n 1))))
 
-;; (print-debug (is-even 10))
-;; (print-debug (is-even 7))
+(print-debug (is-even 10))
+(print-debug (is-even 7))
