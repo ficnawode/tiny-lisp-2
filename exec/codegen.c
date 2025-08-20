@@ -274,7 +274,7 @@ static void codegen_generate_function_body(CodeGenContext *ctx,
 	codegen_env_enter_scope(ctx->env);
 	codegen_env_reset_stack_offset(ctx->env, 0);
 
-	emit_push_reg(ctx->writer, REG_R10, "push the closure pointer");
+	emit_push_reg(ctx->writer, REG_R12, "push the closure pointer");
 	codegen_env_add_stack_space(ctx->env, 8);
 
 	StringArray *params = node->function.param_names;
@@ -322,7 +322,7 @@ static void codegen_generate_function_body(CodeGenContext *ctx,
 
 	codegen_env_exit_scope(ctx->env);
 
-	emit_pop_reg(ctx->writer, REG_R10, "Restore the closure pointer");
+	emit_pop_reg(ctx->writer, REG_R12, "Restore the closure pointer");
 	emit_mov_reg_reg(ctx->writer, REG_RSP, REG_RBP, "");
 	emit_pop_reg(ctx->writer, REG_RBP, "");
 	emit_ret(ctx->writer, "");
@@ -335,6 +335,10 @@ static void codegen_generate_closure_creation(CodeGenContext *ctx,
 {
 	StringArray *free_vars = node->function.free_var_names;
 	guint num_free = free_vars->_array->len;
+
+	int rsp_val = codegen_env_get_stack_offset(ctx->env);
+	guint free_var_stack_space = num_free * sizeof(LispValue *);
+	codegen_env_add_stack_space(ctx->env, free_var_stack_space);
 
 	for (int i = num_free - 1; i >= 0; i--)
 	{
@@ -379,8 +383,8 @@ static void codegen_generate_closure_creation(CodeGenContext *ctx,
 					sizeof(LispClosureObject) +
 					loc->env_index * sizeof(LispValue *);
 				emit_mov_reg_membase(
-					ctx->writer, REG_RAX, REG_R10, env_offset,
-					"load free variable from closure at r10, offset "
+					ctx->writer, REG_RAX, REG_R12, env_offset,
+					"load free variable from closure at r12, offset "
 					"by LispClosureObject (size=%d) ",
 					sizeof(LispClosureObject));
 				emit_push_reg(ctx->writer, REG_RAX,
@@ -416,17 +420,6 @@ static void codegen_generate_closure_creation(CodeGenContext *ctx,
 		(num_free > num_reg_args) ? (num_free - num_reg_args) : 0;
 	guint stack_space_to_clean = num_stack_args * 8;
 
-	// // Per C ABI, stack must be 16-byte aligned before a call.
-	// // If the number of stack arguments is odd, we need to add 8
-	// bytes
-	// // of padding.
-	// if (num_stack_args % 2 != 0)
-	// {
-	// 	emit_sub_rsp(ctx->writer, 8,
-	// 				 "align stack to 16-bytes for call");
-	// 	stack_space_to_clean += 8;
-	// }
-
 	emit_xor_reg_reg(
 		ctx->writer, REG_RAX, REG_RAX,
 		"ABI: zero RAX for variadic call. Otherwise the C ABI "
@@ -438,13 +431,9 @@ static void codegen_generate_closure_creation(CodeGenContext *ctx,
 		emit_add_rsp(
 			ctx->writer, stack_space_to_clean,
 			"take free vars (and alignment padding) off the stack");
+		codegen_env_remove_stack_space(ctx->env,
+									   stack_space_to_clean);
 	}
-
-	// if (num_free > 0)
-	// {
-	// 	emit_add_rsp(ctx->writer, num_free * 8,
-	// 				 "take free vars off the stack");
-	// }
 }
 
 static void codegen_generate_function_impl(CodeGenContext *ctx,
@@ -492,8 +481,8 @@ static inline void codegen_load_free_variable(CodeGenContext *ctx,
 {
 	int64_t free_var_offset = sizeof(LispClosureObject) +
 							  sizeof(LispValue *) * loc->env_index;
-	// The base register is R10, which is wrong.
-	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_R10,
+	// The base register is R12, which is wrong.
+	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_R12,
 						 free_var_offset, "load free (env) cell");
 	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_RAX,
 						 sizeof(LispCell *),
@@ -633,7 +622,11 @@ static void codegen_generate_variadic_builtin_call(
 	codegen_push_arguments(ctx, args);
 
 	emit_pop_reg(ctx->writer, REG_RDI, "pop arg 1 off the stack");
+	codegen_env_remove_stack_space(ctx->env, 8);
+
 	emit_pop_reg(ctx->writer, REG_RSI, "pop arg 2 off the stack");
+	codegen_env_remove_stack_space(ctx->env, 8);
+
 	emit_call_label(ctx->writer, builtin_c_label, "");
 
 	for (guint i = 2; i < num_args; i++)
@@ -658,8 +651,8 @@ static void codegen_generate_lisp_closure_call(CodeGenContext *ctx,
 
 	codegen_generate_node(ctx, call_node->call.fn);
 
-	emit_mov_reg_reg(ctx->writer, REG_R10, REG_RAX,
-					 "save closure pointer in R10");
+	emit_mov_reg_reg(ctx->writer, REG_R12, REG_RAX,
+					 "save closure pointer in R12");
 
 	int num_args_in_regs = min(num_args, NUM_ARGUMENT_REGISTERS);
 	for (guint i = 0; i < num_args_in_regs; i++)
@@ -669,7 +662,7 @@ static void codegen_generate_lisp_closure_call(CodeGenContext *ctx,
 		codegen_env_remove_stack_space(ctx->env, 8);
 	}
 
-	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_R10,
+	emit_mov_reg_membase(ctx->writer, REG_RAX, REG_R12,
 						 sizeof(LispValue *),
 						 "get code ptr from closure");
 	emit_call_reg(ctx->writer, REG_RAX, "call closure");

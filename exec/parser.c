@@ -255,7 +255,6 @@ static Node *parse_function(ParserContext *ctx, ParserEnv *env)
 	g_hash_table_foreach(body_env->free_vars,
 						 g_hash_table_keys_to_string_array,
 						 free_vars);
-	// sort to get deterministic order in lookup
 	return node_create_function(params, free_vars, body_expressions,
 								env);
 }

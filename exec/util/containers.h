@@ -23,6 +23,7 @@ StringArray *string_array_new(void);
 void string_array_add(StringArray *array, char *element);
 char *string_array_index(StringArray *array, int index);
 StringArray *string_array_copy(StringArray *array);
+void string_array_sort(StringArray *array);
 void string_array_free(StringArray *array);
 
 typedef struct VarBinding

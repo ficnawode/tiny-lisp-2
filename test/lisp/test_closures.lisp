@@ -74,9 +74,13 @@
 ;; This tests the standard C function call ABI where arguments beyond
 ;; the 6th are passed on the stack.
 ;; Expected output: 55
-(def (sum-many a b c d e f g h i j) 
+(def (sum-many-even a b c d e f g h i j) 
   (+ a  b c  d e f  g  h  i j))
-(print-debug (sum-many 1 2 3 4 5 6 7 8 9 10))
+(print-debug (sum-many-even 1 2 3 4 5 6 7 8 9 10))
+;; Expected output: 45
+(def (sum-many-odd a b c d e f g h i) 
+  (+ a  b c  d e f  g  h  i))
+(print-debug (sum-many-odd 1 2 3 4 5 6 7 8 9))
 
 
 ;; Test 9 
@@ -87,9 +91,15 @@
 ;; The remaining free variables must be passed correctly on the stack.
 ;; Expected output: 136
 (let ((v1 1) (v2 2) (v3 3) (v4 4) (v5 5) (v6 6) (v7 7) (v8 8))
-  (def mega-closure (lambda (x) 
+  (def mega-closure-even (lambda (x) 
     (+ x (+ v1 (+ v2 (+ v3 (+ v4 (+ v5 (+ v6 (+ v7 v8))))))))))
-  (print-debug (mega-closure 100)))
+  (print-debug (mega-closure-even 100)))
+
+;; Expected output: 128
+(let ((v1 1) (v2 2) (v3 3) (v4 4) (v5 5) (v6 6) (v7 7) )
+  (def mega-closure-odd (lambda (x) 
+    (+ x (+ v1 (+ v2 (+ v3 (+ v4 (+ v5 (+ v6 v7)))))))))
+  (print-debug (mega-closure-odd 100)))
 
 ;; Test 8 
 ;; Mutual Recursion (via shared environment)

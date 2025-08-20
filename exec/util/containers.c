@@ -69,6 +69,18 @@ StringArray *string_array_copy(StringArray *original)
 	return copy;
 }
 
+static gint compare_strings(gconstpointer a, gconstpointer b)
+{
+	const char *str_a = *(const char **)a;
+	const char *str_b = *(const char **)b;
+	return g_strcmp0(str_a, str_b); // Safe string compare
+}
+
+void string_array_sort(StringArray *array)
+{
+	g_ptr_array_sort(array->_array, (GCompareFunc)compare_strings);
+}
+
 void string_array_free(StringArray *array)
 {
 	g_ptr_array_free(array->_array, TRUE);

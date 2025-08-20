@@ -1,5 +1,6 @@
 #include "node.h"
 #include <assert.h>
+#include <stdio.h>
 
 Node *node_create_literal_int(int val)
 {
@@ -76,6 +77,13 @@ Node *node_create_let(VarBindingArray *bindings,
 	return n;
 }
 
+static gint compare_strings(gconstpointer a, gconstpointer b)
+{
+	const char *str_a = *(const char **)a;
+	const char *str_b = *(const char **)b;
+	return g_strcmp0(str_a, str_b); // Safe string compare
+}
+
 Node *node_create_function(StringArray *params,
 						   StringArray *free_vars,
 						   NodeArray *body,
@@ -84,9 +92,8 @@ Node *node_create_function(StringArray *params,
 	Node *n = malloc(sizeof(Node));
 	assert(n && "Out of memory");
 	n->type = NODE_FUNCTION;
+	string_array_sort(free_vars);
 	n->function.free_var_names = free_vars;
-	g_ptr_array_sort(n->function.free_var_names->_array,
-					 (GCompareFunc)g_strcmp0);
 	n->function.closure_env = closure_env;
 	n->function.body = body;
 	n->function.param_names = params;
